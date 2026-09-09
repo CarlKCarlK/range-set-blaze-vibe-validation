@@ -1,3 +1,4 @@
+import Mathlib.Data.List.TakeWhile
 import RangeSetBlaze.Basic
 import RangeSetBlaze.AlgoB
 
@@ -399,19 +400,6 @@ private lemma chain_replace_suffix_same_lo (init : List NR) (old_elem new_elem :
           · -- Show: List.IsChain loLE (first_new :: rest_new)
             rw [← htail_new]
             exact h_tail_new
-
-private lemma mem_takeWhile_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α)
-    (h : x ∈ xs.takeWhile p) : p x = true := by
-  induction xs with
-  | nil => cases h
-  | cons y ys ih =>
-      cases hpy : p y with
-      | false => simp [List.takeWhile, hpy] at h
-      | true =>
-          simp [List.takeWhile, hpy] at h
-          cases h with
-          | inl heq => subst heq; exact hpy
-          | inr htail => exact ih htail
 
 /-- If a list satisfies Pairwise and we decompose it as `pfx ++ [lastElem]`,
 then every element in pfx satisfies the pairwise relation with `lastElem`. -/
@@ -887,7 +875,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       simp [split, before] at this ⊢
       exact this.1
     rw [this] at hmem
-    exact mem_takeWhile_satisfies p xs nr hmem
+    exact List.mem_takeWhile_imp hmem
 
   -- inserted doesn't satisfy p (inserted.lo = start, so not < start)
   have h_inserted_false : p inserted = false := by
@@ -1039,7 +1027,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
         simp [split, before] at this ⊢
         exact this.1
       rw [this] at hx
-      have := mem_takeWhile_satisfies p xs x hx
+      have := List.mem_takeWhile_imp hx
       simp only [p, decide_eq_true_eq] at this
       exact this
 
@@ -1310,7 +1298,7 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
             intro nr hnr
             -- All elements in before_le satisfy nr.lo ≤ r.lo (by definition of takeWhile)
             have h_le : nr.val.lo ≤ r.lo := by
-              have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges nr hnr
+              have h_pred := List.mem_takeWhile_imp hnr
               exact of_decide_eq_true h_pred
             -- If nr = x (the last element), we have nr.lo < r.lo by hx_lt
             by_cases h_eq : nr = x
@@ -1516,7 +1504,7 @@ private def internalAddC_extendPrev_safe
         simp only [Prod.mk.injEq] at hDecomp
         exact hDecomp.1.symm
       rw [h_before_eq] at h_prev_in_before
-      have := mem_takeWhile_satisfies p s.ranges prev h_prev_in_before
+      have := List.mem_takeWhile_imp h_prev_in_before
       simp only [p, decide_eq_true_eq] at this
       exact this
 
@@ -1843,7 +1831,7 @@ private lemma ok_deleteExtraNRs
             _ = (List.span (fun nr => decide (nr.val.lo < start)) xs).fst := by rw [← hsplit]
             _ = xs.takeWhile (fun nr => decide (nr.val.lo < start)) := congrArg Prod.fst h_span
         rw [this] at hx
-        have := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo < start)) xs x hx
+        have := List.mem_takeWhile_imp hx
         simp at this
         exact this
 
@@ -1935,7 +1923,7 @@ private lemma span_props_from_chain
       have : split.fst = xs.takeWhile p := congrArg Prod.fst this
       rw [← this]
       exact hmem
-    have := mem_takeWhile_satisfies p xs nr hmem_take
+    have := List.mem_takeWhile_imp hmem_take
     simp [p] at this
     exact this
 
@@ -2315,7 +2303,7 @@ theorem internalAddC_extendPrev_safe_toSet
       simp only [Prod.mk.injEq] at hDecomp
       exact hDecomp.1.symm
     rw [h_before_eq] at h_prev_in_before
-    have := mem_takeWhile_satisfies p s.ranges prev h_prev_in_before
+    have := List.mem_takeWhile_imp h_prev_in_before
     simp only [p, decide_eq_true_eq] at this
     exact this
 
@@ -3015,7 +3003,7 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
                 rw [h_tw_eq]
                 rw [← heq]
                 exact List.getLast_mem hne'
-              have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+              have h_pred := List.mem_takeWhile_imp h_prev_mem
               exact of_decide_eq_true h_pred
             -- r.hi ≤ prev.hi from h_covered
             have h_r_hi_le : r.hi ≤ prev.val.hi := h_covered
