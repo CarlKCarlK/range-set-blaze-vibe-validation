@@ -1,0 +1,181 @@
+{
+  "collector": "scripts/phase0_metrics.py",
+  "method": "comment-aware lexical fallback; see script module docstring",
+  "files": [
+    {
+      "file": "Main.lean",
+      "physical_loc": 95,
+      "total_nonblank_loc": 78,
+      "blank_loc": 17,
+      "comment_only_loc": 2,
+      "active_code_loc": 76,
+      "defs_abbrev": 11,
+      "lemmas_theorems": 0,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "simp": 2,
+        "simpa": 5,
+        "rw": 0,
+        "have": 9,
+        "linarith": 0,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 0,
+        "cases": 0
+      }
+    },
+    {
+      "file": "RangeSetBlaze/AlgoB.lean",
+      "physical_loc": 890,
+      "total_nonblank_loc": 838,
+      "blank_loc": 52,
+      "comment_only_loc": 18,
+      "active_code_loc": 820,
+      "defs_abbrev": 16,
+      "lemmas_theorems": 13,
+      "private_lemmas_theorems": 1,
+      "tokens": {
+        "simp": 62,
+        "simpa": 37,
+        "rw": 1,
+        "have": 173,
+        "linarith": 6,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 2,
+        "cases": 23
+      }
+    },
+    {
+      "file": "RangeSetBlaze/AlgoC.lean",
+      "physical_loc": 3320,
+      "total_nonblank_loc": 3059,
+      "blank_loc": 261,
+      "comment_only_loc": 866,
+      "active_code_loc": 2193,
+      "defs_abbrev": 11,
+      "lemmas_theorems": 36,
+      "private_lemmas_theorems": 30,
+      "tokens": {
+        "simp": 216,
+        "simpa": 18,
+        "rw": 191,
+        "have": 503,
+        "linarith": 3,
+        "omega": 15,
+        "grind": 0,
+        "by_cases": 20,
+        "cases": 61
+      }
+    },
+    {
+      "file": "RangeSetBlaze/Basic.lean",
+      "physical_loc": 477,
+      "total_nonblank_loc": 420,
+      "blank_loc": 57,
+      "comment_only_loc": 13,
+      "active_code_loc": 407,
+      "defs_abbrev": 14,
+      "lemmas_theorems": 22,
+      "private_lemmas_theorems": 3,
+      "tokens": {
+        "simp": 23,
+        "simpa": 25,
+        "rw": 1,
+        "have": 41,
+        "linarith": 3,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 5,
+        "cases": 5
+      }
+    },
+    {
+      "file": "RangeSetBlaze.lean",
+      "physical_loc": 7,
+      "total_nonblank_loc": 6,
+      "blank_loc": 1,
+      "comment_only_loc": 2,
+      "active_code_loc": 4,
+      "defs_abbrev": 0,
+      "lemmas_theorems": 0,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "simp": 0,
+        "simpa": 0,
+        "rw": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 0,
+        "cases": 0
+      }
+    },
+    {
+      "file": "RangeSetBlazeLean2/Basic.lean",
+      "physical_loc": 1,
+      "total_nonblank_loc": 1,
+      "blank_loc": 0,
+      "comment_only_loc": 0,
+      "active_code_loc": 1,
+      "defs_abbrev": 1,
+      "lemmas_theorems": 0,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "simp": 0,
+        "simpa": 0,
+        "rw": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 0,
+        "cases": 0
+      }
+    },
+    {
+      "file": "RangeSetBlazeLean2.lean",
+      "physical_loc": 1,
+      "total_nonblank_loc": 1,
+      "blank_loc": 0,
+      "comment_only_loc": 0,
+      "active_code_loc": 1,
+      "defs_abbrev": 0,
+      "lemmas_theorems": 0,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "simp": 0,
+        "simpa": 0,
+        "rw": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "grind": 0,
+        "by_cases": 0,
+        "cases": 0
+      }
+    }
+  ],
+  "totals": {
+    "physical_loc": 4791,
+    "total_nonblank_loc": 4403,
+    "blank_loc": 388,
+    "comment_only_loc": 901,
+    "active_code_loc": 3502,
+    "defs_abbrev": 53,
+    "lemmas_theorems": 71,
+    "private_lemmas_theorems": 34
+  },
+  "token_totals": {
+    "simp": 303,
+    "simpa": 85,
+    "rw": 193,
+    "have": 726,
+    "linarith": 12,
+    "omega": 15,
+    "grind": 0,
+    "by_cases": 27,
+    "cases": 89
+  }
+}
