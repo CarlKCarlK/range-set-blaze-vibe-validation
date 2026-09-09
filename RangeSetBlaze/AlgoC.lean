@@ -192,9 +192,6 @@ private def internalAdd2NRs (xs : List NR) (start stop : Int)
 open Classical
 open IntRange
 
-/-- Pack endpoints as a nonempty range. -/
-private def mkNR' (lo hi : Int) (h : lo ≤ hi) : NR :=
-  ⟨{ lo := lo, hi := hi }, h⟩
 
 -- Local helper: list-based set view (same as listToSet from Basic.lean but scoped to this file)
 section LocalDefs
