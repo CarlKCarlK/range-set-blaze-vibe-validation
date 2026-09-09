@@ -968,19 +968,10 @@ private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
 -- Helper lemma: getLast? = some implies getLast returns the same value
 theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.getLast? = some x) :
     ∃ hne : xs ≠ [], xs.getLast hne = x := by
-  cases xs with
-  | nil => simp at h
-  | cons hd tl =>
-    have hne : hd :: tl ≠ [] := List.cons_ne_nil hd tl
-    use hne
-    simp [List.getLast?] at h
-    cases tl with
-    | nil =>
-      simp [List.getLast] at h ⊢
-      exact h
-    | cons hd2 tl2 =>
-      simp [List.getLast] at h ⊢
-      exact h
+  have hne : xs ≠ [] := by
+    intro hnil
+    simp [hnil] at h
+  exact ⟨hne, List.getLast_of_getLast?_eq_some h⟩
 
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
 a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
@@ -2428,22 +2419,7 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
                 rw [← heq]
                 exact List.getLast_mem hne'
               have h_prev_mem_ranges : prev ∈ s.ranges := by
-                -- tw = takeWhile p s.ranges, so tw ⊆ s.ranges
-                -- Show: x ∈ takeWhile p xs → x ∈ xs by induction
-                have mem_takeWhile_mem : ∀ {α : Type _} (p : α → Bool) (xs : List α) (x : α),
-                    x ∈ xs.takeWhile p → x ∈ xs := by
-                  intro α p xs
-                  induction xs with
-                  | nil => intro x h; cases h
-                  | cons hd tl ih =>
-                      intro x hx
-                      by_cases hp : p hd
-                      · simp [List.takeWhile, hp] at hx
-                        cases hx with
-                        | inl heq => simp [heq]
-                        | inr htl => simp; exact Or.inr (ih x htl)
-                      · simp [List.takeWhile, hp] at hx
-                exact mem_takeWhile_mem (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+                exact List.takeWhile_subset _ h_prev_mem
               -- s.toSet = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by definition
               -- algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by algoCListSet_eq_foldr
               -- So algoCListSet s.ranges = s.toSet definitionally
