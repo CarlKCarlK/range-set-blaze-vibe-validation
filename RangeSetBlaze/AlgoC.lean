@@ -247,14 +247,14 @@ private lemma deleteExtraNRs_loop_preserves_sets (current : NR) (pending : List 
         have hchain_tail : List.IsChain loLE (next :: tail) := List.IsChain.tail hchain
 
         -- Extract loLE current next from chain
-        have hcurrent_next : loLE current next := List.IsChain.rel_head hchain
+        have hcurrent_next : loLE current next := List.IsChain.rel hchain
 
         -- Build chain for merged :: tail
         have hchain_merged_tail : List.IsChain loLE (merged :: tail) := by
           cases tail with
           | nil => constructor
           | cons t ts =>
-              have hnt : loLE next t := List.IsChain.rel_head hchain_tail
+              have hnt : loLE next t := List.IsChain.rel hchain_tail
               constructor
               · -- Show loLE merged t
                 rw [loLE_iff]
@@ -360,7 +360,7 @@ private lemma chain_replace_suffix_same_lo (init : List NR) (old_elem new_elem :
         -- Rewrite h_chain using htail_old
         rw [htail_old] at h_chain
 
-        have h_head_rel : loLE head first_old := List.IsChain.rel_head h_chain
+        have h_head_rel : loLE head first_old := List.IsChain.rel h_chain
         have h_tail_chain : List.IsChain loLE (tail ++ old_elem :: suffix) := by
           rw [htail_old]
           exact List.IsChain.tail h_chain
@@ -515,7 +515,7 @@ private lemma chain_head_le_all_tail
   | cons a ys ih =>
       intro y hchain z hz
       have h_y_le_a : y.val.lo ≤ a.val.lo := by
-        have := List.IsChain.rel_head hchain
+        have := List.IsChain.rel hchain
         exact this
       have htail : List.IsChain loLE (a :: ys) :=
         List.IsChain.tail hchain
@@ -2790,7 +2790,7 @@ lemma internalAddC_extendPrev_toSet
             rw [hafter] at hchain_init_prev_after
             constructor
             · -- Show loLE extended a
-              have h_prev_a : loLE prev a := List.IsChain.rel_head hchain_init_prev_after
+              have h_prev_a : loLE prev a := List.IsChain.rel hchain_init_prev_after
               unfold loLE at h_prev_a ⊢
               rw [h_extended_lo]
               exact h_prev_a
@@ -2817,14 +2817,14 @@ lemma internalAddC_extendPrev_toSet
             | nil =>
               -- Just [head, extended] vs [head, prev]
               constructor
-              · have := List.IsChain.rel_head hchain_init_prev_after
+              · have := List.IsChain.rel hchain_init_prev_after
                 simp at this
                 rw [h_extended_lo]
                 exact this
               · constructor
             | cons a as =>
               constructor
-              · have := List.IsChain.rel_head hchain_init_prev_after
+              · have := List.IsChain.rel hchain_init_prev_after
                 simp at this
                 rw [h_extended_lo]
                 exact this
@@ -2834,7 +2834,7 @@ lemma internalAddC_extendPrev_toSet
                     simp at h_tail
                     rw [hafter_match] at h_tail
                     exact h_tail
-                  have hprev_a : loLE prev a := List.IsChain.rel_head hprev_after
+                  have hprev_a : loLE prev a := List.IsChain.rel hprev_after
                   unfold loLE at hprev_a ⊢
                   rw [h_extended_lo]
                   exact hprev_a
@@ -2853,7 +2853,7 @@ lemma internalAddC_extendPrev_toSet
             constructor
             · -- Show: loLE head (first element of t :: ts ++ extended :: after)
               -- First element is t, which is unchanged
-              have := List.IsChain.rel_head hchain_init_prev_after
+              have := List.IsChain.rel hchain_init_prev_after
               simp at this
               exact this
             · -- Show: List.IsChain loLE (t :: ts ++ extended :: after)
