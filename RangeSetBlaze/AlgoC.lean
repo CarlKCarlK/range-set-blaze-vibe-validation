@@ -435,27 +435,6 @@ private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
           | cons _ hrest =>
               exact ih hrest htail
 
-/-- Construct Pairwise on an append when left is Pairwise, right is Pairwise,
-and all elements of left relate to all elements of right. -/
-private lemma pairwise_append {α : Type _} (R : α → α → Prop)
-    (xs ys : List α)
-    (hxs : List.Pairwise R xs)
-    (hys : List.Pairwise R ys)
-    (hcross : ∀ x ∈ xs, ∀ y ∈ ys, R x y) :
-    List.Pairwise R (xs ++ ys) := by
-  induction xs with
-  | nil => exact hys
-  | cons x xs' ih =>
-      cases hxs with
-      | cons hx_xs' hxs' =>
-          constructor
-          · intro y hy
-            simp at hy
-            cases hy with
-            | inl hmem => exact hx_xs' y hmem
-            | inr hmem => exact hcross x (by simp) y hmem
-          · exact ih hxs' (fun x' hx' y hy => hcross x' (by simp [hx']) y hy)
-
 private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
   | [], _, h => by cases h
@@ -1211,8 +1190,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
       -- Conclude: x.hi + 1 < start ≤ y.lo, so x.hi + 1 < y.lo
       exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
-  exact pairwise_append NR.before before (result.fst :: result.snd)
-    hpw_before hpw_result hcross
+  exact List.pairwise_append.mpr ⟨hpw_before, hpw_result, hcross⟩
 
 /-- If the (≤ start) split is empty, then the (< start) split is also empty.
 This is because `< start` is strictly stronger than `≤ start`. -/
@@ -1623,7 +1601,7 @@ private def internalAddC_extendPrev_safe
       exact lt_of_lt_of_le h_x_hi_lt_start' h_y_ge
 
     -- Apply pairwise_append to combine
-    exact pairwise_append NR.before init (res.fst :: res.snd) hpw_init hpw_res hcross
+    exact List.pairwise_append.mpr ⟨hpw_init, hpw_res, hcross⟩
 
   fromNRs newRanges hpw_newRanges
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
@@ -1753,7 +1731,7 @@ private lemma ok_deleteExtraNRs
 
     -- Need to show: Pairwise (before ++ res.fst :: res.snd)
     -- Use pairwise_append helper
-    apply pairwise_append NR.before
+    refine List.pairwise_append.mpr ⟨?_, ?_, ?_⟩
     · exact hpw_before
     · -- Pairwise on (res.fst :: res.snd)
       apply ok_deleteExtraNRs_loop curr.val.lo initial tail
