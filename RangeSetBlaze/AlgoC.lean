@@ -218,8 +218,6 @@ end LocalDefs
 @[reducible] private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
 
-private lemma loLE_iff (a b : NR) : loLE a b ↔ a.val.lo ≤ b.val.lo := Iff.rfl
-
 /-- If ranges satisfy `Pairwise before`, they also satisfy `IsChain loLE`.
 The `before` relation (no gap/overlap) implies `lo` ordering. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
@@ -485,84 +483,6 @@ private lemma deleteExtraNRs_loop_lo_ge
           · exact hge next (by simp)
           · intro a ha hmem
             exact hge ⟨a, nonempty_iff_not_empty a |>.mpr ha⟩ (by simp [hmem])
-
-/-- Invariant preservation: `deleteExtraNRs_loop` maintains `Pairwise NR.before`.
-- Base case (nil): trivial, loop returns `(current, [])`.
-- Inductive case (cons next tail):
-  * If merge (next.lo ≤ current.hi + 1):
-    - Construct merged range from current.lo to max current.hi next.hi
-    - Need to show: if Pairwise on (current :: next :: tail), then Pairwise on (merged :: tail)
-    - Key: merged.lo = current.lo, and merged.hi ≥ next.hi
-    - For any z ∈ tail: next ≺ z implies merged ≺ z (since merged.hi ≤ max current.hi next.hi and max ≤ next.hi in this direction doesn't help, but next ≺ z means next.hi + 1 < z.lo, and since we're merging, current.hi ≈ next.hi)
-    - Apply IH to (merged, tail)
-  * If no merge:
-    - Loop returns (current, next :: tail), which is exactly the input Pairwise structure
--/
-private lemma ok_deleteExtraNRs_loop
-    (start : Int)
-    (current : NR) (pending : List NR)
-    (hlo : current.val.lo = start)
-    (hge : ∀ nr ∈ pending, start ≤ nr.val.lo)
-    (hpw : List.Pairwise NR.before (current :: pending)) :
-    List.Pairwise NR.before
-      (let res := deleteExtraNRs_loop current pending;
-        res.fst :: res.snd) := by
-  induction pending generalizing current with
-  | nil =>
-      simp
-  | cons next tail ih =>
-      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
-      · -- Merge case
-        set merged := mkNR current.val.lo (max current.val.hi next.val.hi)
-          (by have := current.property; exact le_trans this (le_max_left _ _))
-
-        -- The loop will recursively process (merged, tail)
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
-                          deleteExtraNRs_loop merged tail := by
-          simpa using deleteExtraNRs_loop_cons_merge current next tail hmerge
-
-        rw [h_loop_eq]
-
-        -- Apply IH: need to show Pairwise on (merged :: tail)
-        apply ih merged
-        · -- merged.lo = start
-          simp [merged, mkNR, hlo]
-        · -- ∀ nr ∈ tail, start ≤ nr.lo
-          intro nr hmem
-          exact hge nr (by simp [hmem])
-        · -- Pairwise on (merged :: tail)
-          -- Extract the structure of hpw: Pairwise (current :: next :: tail)
-          cases hpw with
-          | cons h_current_rest hpw_rest =>
-              -- h_current_rest: ∀ b ∈ (next :: tail), current ≺ b
-              -- hpw_rest: Pairwise (next :: tail)
-              cases hpw_rest with
-              | cons h_next_tail hpw_tail =>
-                  -- h_next_tail: ∀ b ∈ tail, next ≺ b
-                  -- hpw_tail: Pairwise tail
-                  constructor
-                  · -- Show: ∀ z ∈ tail, merged ≺ z
-                    intro z hz
-                    unfold NR.before at *
-                    -- We have: next ≺ z, i.e., next.hi + 1 < z.lo
-                    have h_next_z : next.val.hi + 1 < z.val.lo := h_next_tail z hz
-                    -- merged.hi = max current.hi next.hi
-                    have h_merged_hi : merged.val.hi = max current.val.hi next.val.hi := by
-                      simp [merged, mkNR]
-                    rw [h_merged_hi]
-                    -- Need: max current.hi next.hi + 1 < z.lo
-                    -- We know both: current ≺ z and next ≺ z
-                    have h_current_z : current.val.hi + 1 < z.val.lo :=
-                      h_current_rest z (by simp [hz])
-                    -- So max current.hi next.hi < z.lo - 1, hence max + 1 < z.lo
-                    have : max current.val.hi next.val.hi < z.val.lo := by omega
-                    omega
-                  · exact hpw_tail
-      · -- No merge case
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
-                          (current, next :: tail) := by
-          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
-        simp [h_loop_eq, hpw]
 
 /-- Weak variant: we only assume `Pairwise pending` and `start ≤ lo` on `pending`.
 It shows the loop output is `Pairwise`, even if `current` may overlap `pending.head`. -/
