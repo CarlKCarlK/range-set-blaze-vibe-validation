@@ -435,20 +435,6 @@ private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
           | cons _ hrest =>
               exact ih hrest htail
 
-/-- Extract Pairwise on the left part of an append. -/
-private lemma pairwise_append_left {α : Type _} (R : α → α → Prop)
-    (xs ys : List α) (h : List.Pairwise R (xs ++ ys)) :
-    List.Pairwise R xs := by
-  induction xs generalizing ys with
-  | nil => constructor
-  | cons x xs' ih =>
-      cases h with
-      | cons hx hrest =>
-          constructor
-          · intro y hy
-            exact hx y (by simp [hy])
-          · exact ih ys hrest
-
 /-- Extract the cross-product property from Pairwise on an append. -/
 private lemma pairwise_append_cross {α : Type _} (R : α → α → Prop)
     (xs ys : List α) (h : List.Pairwise R (xs ++ ys)) :
@@ -1009,7 +995,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
             exact this.2
           rw [h1, h2]
     rw [h_xs_decomp] at hpw
-    exact pairwise_append_left NR.before before after hpw
+    exact (List.pairwise_append.mp hpw).1
 
   -- Step 2: Extract Pairwise on after
   have hpw_after : List.Pairwise NR.before after := by
@@ -1400,7 +1386,7 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
                 have h_ok_decomp : List.Pairwise (· ≺ ·) (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
                                                            s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
                   rw [h_decomp]; exact s.ok
-                exact pairwise_append_left (· ≺ ·) _ _ h_ok_decomp
+                exact (List.pairwise_append.mp h_ok_decomp).1
 
               -- Now apply it to before_le
               have h_pw_before : List.Pairwise (· ≺ ·) before_le := by
@@ -1515,7 +1501,7 @@ private def internalAddC_extendPrev_safe
             rw [h1, h2]
       have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
         rw [← h_s_decomp]; exact s.ok
-      exact pairwise_append_left NR.before before after h_ok_decomp
+      exact (List.pairwise_append.mp h_ok_decomp).1
 
     -- Extract Pairwise for init using dropLast
     have hpw_init : List.Pairwise NR.before init := by
@@ -1523,7 +1509,7 @@ private def internalAddC_extendPrev_safe
       have : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
       rw [heq] at this
       rw [this] at hpw_before
-      exact pairwise_append_left NR.before init [prev] hpw_before
+      exact (List.pairwise_append.mp hpw_before).1
 
     -- Extract Pairwise for after from s.ok
     have hpw_after : List.Pairwise NR.before after := by
@@ -1756,7 +1742,7 @@ private lemma ok_deleteExtraNRs
     -- Extract Pairwise on before and rest
     have hpw_before : List.Pairwise NR.before before := by
       rw [h_xs_decomp] at hpw
-      exact pairwise_append_left NR.before before rest hpw
+      exact (List.pairwise_append.mp hpw).1
 
     have hpw_rest : List.Pairwise NR.before rest := by
       have h_eq : xs = before ++ rest := h_xs_decomp
