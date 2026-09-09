@@ -1,12 +1,11 @@
 name = "range-set-blaze-lean2"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["RangeSetBlazeLean2"]
+defaultTargets = ["rangesetblaze"]
 
 [leanOptions]
 pp.unicode.fun = true # pretty-prints `fun a ↦ b`
 relaxedAutoImplicit = false
-weak.linter.mathlibStandardSet = true
 maxSynthPendingDepth = 3
 
 [[require]]
@@ -15,4 +14,8 @@ scope = "leanprover-community"
 rev = "v4.33.1"
 
 [[lean_lib]]
-name = "RangeSetBlazeLean2"
+name = "RangeSetBlaze"
+
+[[lean_exe]]
+name = "rangesetblaze"
+root = "Main"
