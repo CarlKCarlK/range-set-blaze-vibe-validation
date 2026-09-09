@@ -220,61 +220,6 @@ end LocalDefs
 
 private lemma loLE_iff (a b : NR) : loLE a b ↔ a.val.lo ≤ b.val.lo := Iff.rfl
 
-/-- The `deleteExtraNRs_loop` preserves set unions when given a chain. -/
-private lemma deleteExtraNRs_loop_preserves_sets (current : NR) (pending : List NR)
-    (hchain : List.IsChain loLE (current :: pending)) :
-    algoCListSet ((deleteExtraNRs_loop current pending).fst :: (deleteExtraNRs_loop current pending).snd)
-    = current.val.toSet ∪ algoCListSet pending := by
-  induction pending generalizing current with
-  | nil =>
-      -- Base case: pending = []
-      -- Loop returns (current, [])
-      simp [deleteExtraNRs_loop_nil]
-  | cons next tail ih =>
-      -- Inductive case: pending = next :: tail
-      by_cases h : next.val.lo ≤ current.val.hi + 1
-      case pos =>
-        -- Merge case: current and next merge
-        rw [deleteExtraNRs_loop_cons_merge current next tail h]
-        let merged := mkNR current.val.lo (max current.val.hi next.val.hi)
-          (by
-            have hc : current.val.lo ≤ current.val.hi := current.property
-            exact le_trans hc (le_max_left _ _))
-
-        -- Extract chain property for next :: tail
-        have hchain_tail : List.IsChain loLE (next :: tail) := List.IsChain.tail hchain
-
-        -- Extract loLE current next from chain
-        have hcurrent_next : loLE current next := List.IsChain.rel hchain
-
-        -- Build chain for merged :: tail
-        have hchain_merged_tail : List.IsChain loLE (merged :: tail) := by
-          cases tail with
-          | nil => constructor
-          | cons t ts =>
-              have hnt : loLE next t := List.IsChain.rel hchain_tail
-              constructor
-              · -- Show loLE merged t
-                rw [loLE_iff]
-                calc merged.val.lo
-                  _ = current.val.lo := by simp [merged, mkNR]
-                  _ ≤ next.val.lo := by rw [← loLE_iff]; exact hcurrent_next
-                  _ ≤ t.val.lo := by rw [← loLE_iff]; exact hnt
-              · exact List.IsChain.tail hchain_tail
-
-        rw [ih merged hchain_merged_tail]
-
-        -- Use merge_step_sets to show the equality
-        have horder : current.val.lo ≤ next.val.lo := by rw [← loLE_iff]; exact hcurrent_next
-        have htouch : ¬ (current.val.hi + 1 < next.val.lo) := by linarith
-        have hmerge := merge_step_sets current next horder htouch
-        simp [merged, mkNR] at hmerge ⊢
-        rw [← hmerge]
-        ac_rfl
-      case neg =>
-        -- No merge case: returns (current, next :: tail)
-        simp [deleteExtraNRs_loop, h]
-
 /-- If ranges satisfy `Pairwise before`, they also satisfy `IsChain loLE`.
 The `before` relation (no gap/overlap) implies `lo` ordering. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
