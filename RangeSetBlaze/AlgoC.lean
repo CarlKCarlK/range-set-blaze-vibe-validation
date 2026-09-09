@@ -275,34 +275,6 @@ private lemma deleteExtraNRs_loop_preserves_sets (current : NR) (pending : List 
         -- No merge case: returns (current, next :: tail)
         simp [deleteExtraNRs_loop, h]
 
-private lemma takeWhile_append_of_all {α : Type _} (p : α → Bool)
-    (l : List α) (x : α) (xs : List α)
-    (hall : ∀ y ∈ l, p y = true) (hx : p x = false) :
-    (l ++ x :: xs).takeWhile p = l := by
-  induction l with
-  | nil =>
-      simp [hx]
-  | cons y ys ih =>
-      have hy : p y = true := hall y (by simp)
-      have hys : ∀ z ∈ ys, p z = true := by
-        intro z hz
-        exact hall z (by simp [hz])
-      simp [hy, ih hys]
-
-private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
-    (l : List α) (x : α) (xs : List α)
-    (hall : ∀ y ∈ l, p y = true) (hx : p x = false) :
-    (l ++ x :: xs).dropWhile p = x :: xs := by
-  induction l with
-  | nil =>
-      simp [hx]
-  | cons y ys ih =>
-      have hy : p y = true := hall y (by simp)
-      have hys : ∀ z ∈ ys, p z = true := by
-        intro z hz
-        exact hall z (by simp [hz])
-      simp [hy, ih hys]
-
 /-- If ranges satisfy `Pairwise before`, they also satisfy `IsChain loLE`.
 The `before` relation (no gap/overlap) implies `lo` ordering. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
@@ -787,23 +759,6 @@ private lemma ok_deleteExtraNRs_loop_weak
             | cons hx _ => exact hx b hb
           · exact hpw_tail
 
-/-- If dropWhile returns a non-empty list, the first element doesn't satisfy the predicate. -/
-private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α) (xs' : List α)
-    (h : xs.dropWhile p = x :: xs') :
-    p x = false := by
-  induction xs with
-  | nil =>
-      simp [List.dropWhile] at h
-  | cons y ys ih =>
-      simp [List.dropWhile] at h
-      split at h
-      · -- p y = true, so y is dropped, recurse
-        exact ih h
-      · -- p y = false, so dropWhile returns y :: ys
-        rename_i h_not
-        cases h
-        exact h_not
-
 /-- If `before` is nonempty and its last element is strictly before `start`,
 then every element of `before` is strictly before `start`. -/
 private lemma all_before_strict_before_start
@@ -885,10 +840,12 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
   -- Span of ys gives back (before, inserted :: after)
   have h_span_ys : List.span p ys = (before, inserted :: after) := by
-    have htake : ys.takeWhile p = before :=
-      takeWhile_append_of_all p before inserted after h_before_all h_inserted_false
-    have hdrop : ys.dropWhile p = inserted :: after :=
-      dropWhile_append_of_all p before inserted after h_before_all h_inserted_false
+    have htake : ys.takeWhile p = before := by
+      rw [List.takeWhile_append_of_pos h_before_all]
+      simp [h_inserted_false]
+    have hdrop : ys.dropWhile p = inserted :: after := by
+      rw [List.dropWhile_append_of_pos h_before_all]
+      simp [h_inserted_false]
     simp [List.span_eq_takeWhile_dropWhile, htake, hdrop]
 
   -- Now analyze deleteExtraNRs on ys
@@ -1798,8 +1755,14 @@ private lemma ok_deleteExtraNRs
                         _ = xs.dropWhile (fun nr => decide (nr.val.lo < start)) := congrArg Prod.snd h_span
                     have h_dropwhile_eq : xs.dropWhile (fun nr => decide (nr.val.lo < start)) = curr :: tail := by
                       rw [← h_rest_eq, h_rest_drop]
-                    have h_not_sat := dropWhile_head_not_satisfies (fun nr => decide (nr.val.lo < start)) xs curr tail h_dropwhile_eq
-                    simp at h_not_sat
+                    have h_not_sat := List.dropWhile_get_zero_not
+                      (fun nr => decide (nr.val.lo < start)) xs (by
+                        rw [h_dropwhile_eq]
+                        simp)
+                    have h_not_sat' :
+                        ¬ (decide (((curr :: tail).get ⟨0, by simp⟩).val.lo < start)) = true := by
+                      simpa [h_dropwhile_eq] using h_not_sat
+                    simp at h_not_sat'
                     omega
                   omega
                 exact hstop z hz_in_xs hz_lo_ge
@@ -1890,9 +1853,13 @@ private lemma span_split_on_splice
   have h_inserted_p : p inserted = false := by
     simp [p, h_inserted_lo]
   have htake : (before ++ inserted :: after).takeWhile p = before :=
-    takeWhile_append_of_all p before inserted after h_before_p h_inserted_p
+    by
+      rw [List.takeWhile_append_of_pos h_before_p]
+      simp [h_inserted_p]
   have hdrop : (before ++ inserted :: after).dropWhile p = inserted :: after :=
-    dropWhile_append_of_all p before inserted after h_before_p h_inserted_p
+    by
+      rw [List.dropWhile_append_of_pos h_before_p]
+      simp [h_inserted_p]
   rw [List.span_eq_takeWhile_dropWhile]
   rw [htake, hdrop]
 
@@ -2018,13 +1985,13 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
       List.span p (before ++ inserted :: after)
         = (before, inserted :: after) := by
     have htake :
-        (before ++ inserted :: after).takeWhile p = before :=
-      takeWhile_append_of_all p before inserted after
-        h_before_all h_inserted_false
+        (before ++ inserted :: after).takeWhile p = before := by
+      rw [List.takeWhile_append_of_pos h_before_all]
+      simp [h_inserted_false]
     have hdrop :
-        (before ++ inserted :: after).dropWhile p = inserted :: after :=
-      dropWhile_append_of_all p before inserted after
-        h_before_all h_inserted_false
+        (before ++ inserted :: after).dropWhile p = inserted :: after := by
+      rw [List.dropWhile_append_of_pos h_before_all]
+      simp [h_inserted_false]
     simp [List.span_eq_takeWhile_dropWhile, htake, hdrop]
 
   -- From the chain invariant on xs we get start ≤ lo for every elt of `after`
