@@ -435,23 +435,6 @@ private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
           | cons _ hrest =>
               exact ih hrest htail
 
-/-- Extract the cross-product property from Pairwise on an append. -/
-private lemma pairwise_append_cross {α : Type _} (R : α → α → Prop)
-    (xs ys : List α) (h : List.Pairwise R (xs ++ ys)) :
-    ∀ x ∈ xs, ∀ y ∈ ys, R x y := by
-  induction xs generalizing ys with
-  | nil => intros; contradiction
-  | cons x xs' ih =>
-      cases h with
-      | cons hx hrest =>
-          intro a ha y hy
-          simp at ha
-          cases ha with
-          | inl heq =>
-              rw [heq]
-              exact hx y (by simp [hy])
-          | inr hmem => exact ih ys hrest a hmem y hy
-
 /-- Construct Pairwise on an append when left is Pairwise, right is Pairwise,
 and all elements of left relate to all elements of right. -/
 private lemma pairwise_append {α : Type _} (R : α → α → Prop)
@@ -1595,7 +1578,7 @@ private def internalAddC_extendPrev_safe
         exact this
       -- From Pairwise on before ++ after, we get that prev ≺ nr for all nr ∈ after
       rw [h_before_decomp] at h_ok_decomp
-      have h_cross := pairwise_append_cross NR.before (init ++ [prev]) after h_ok_decomp
+      have h_cross := (List.pairwise_append.mp h_ok_decomp).2.2
       have h_prev_before_nr : NR.before prev nr := by
         apply h_cross prev _ nr hmem
         simp
@@ -1631,7 +1614,7 @@ private def internalAddC_extendPrev_safe
       rw [heq] at h_before_decomp
       rw [h_before_decomp] at hpw_before
       have h_x_before_prev : NR.before x prev := by
-        have hcross_init_prev := pairwise_append_cross NR.before init [prev] hpw_before
+        have hcross_init_prev := (List.pairwise_append.mp hpw_before).2.2
         exact hcross_init_prev x hx prev (by simp)
       -- x.val.hi + 1 < prev.val.lo = start'
       have h_x_hi_lt_start' : x.val.hi + 1 < start' := by
@@ -1905,7 +1888,7 @@ private lemma ok_deleteExtraNRs
       have h_x_before_curr : x ≺ curr := by
         have : ∀ a ∈ before, ∀ b ∈ rest, a ≺ b := by
           rw [h_xs_decomp] at hpw
-          exact pairwise_append_cross NR.before before rest hpw
+          exact (List.pairwise_append.mp hpw).2.2
         rw [h_rest_eq] at this
         exact this x hx curr (by simp)
 
@@ -2386,7 +2369,7 @@ theorem internalAddC_extendPrev_safe_toSet
     have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
       rw [← h_s_ranges_decomp]; exact s.ok
     rw [h_before_decomp] at h_ok_decomp
-    have h_cross := pairwise_append_cross NR.before (init ++ [prev]) after h_ok_decomp
+    have h_cross := (List.pairwise_append.mp h_ok_decomp).2.2
     have h_prev_before_nr : NR.before prev nr := by
       apply h_cross prev _ nr hmem
       simp
