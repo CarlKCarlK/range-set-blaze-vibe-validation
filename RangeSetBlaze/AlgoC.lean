@@ -208,34 +208,6 @@ private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : N
       | inr htail =>
           exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_algoCListSet xs nr htail) _
 
-private lemma chain_head_le_all_tail
-    (y : NR) (ys : List NR)
-    (hchain : List.IsChain loLE (y :: ys)) :
-    ∀ z ∈ ys, y.val.lo ≤ z.val.lo := by
-  revert y
-  induction ys with
-  | nil =>
-      intro y _ z hz
-      cases hz
-  | cons a ys ih =>
-      intro y hchain z hz
-      have h_y_le_a : y.val.lo ≤ a.val.lo := by
-        have := List.IsChain.rel hchain
-        exact this
-      have htail : List.IsChain loLE (a :: ys) :=
-        List.IsChain.tail hchain
-      have hz_cases : z = a ∨ z ∈ ys := by
-        simp only [List.mem_cons] at hz
-        exact hz
-      cases hz_cases with
-      | inl hz_eq =>
-          subst hz_eq
-          exact h_y_le_a
-      | inr hz_mem =>
-          have h_a_le_z : a.val.lo ≤ z.val.lo :=
-            ih _ htail _ hz_mem
-          exact le_trans h_y_le_a h_a_le_z
-
 private lemma span_suffix_all_ge_start_of_chain
     (xs : List NR) (start : Int)
     (hchain : List.IsChain loLE xs) :
@@ -303,7 +275,7 @@ private lemma span_suffix_all_ge_start_of_chain
       | inr htail =>
           have h_y_le_nr :
               y.val.lo ≤ nr.val.lo :=
-            chain_head_le_all_tail y ys hchain_after nr htail
+            hchain_after.rel_cons htail
           exact le_trans h_start_le_y h_y_le_nr
 
 /-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
@@ -459,7 +431,7 @@ private lemma ok_deleteExtraNRs_loop_weak
             cases hpwP with
             | cons hx htail => exact List.Pairwise.cons hx htail)
         have hnext_le : ∀ z ∈ tail, next.val.lo ≤ z.val.lo :=
-          chain_head_le_all_tail next tail hchain
+          fun z hz => hchain.rel_cons hz
         have h_current_tail : ∀ z ∈ tail, NR.before current z := by
           intro z hz
           have : current.val.hi + 1 < next.val.lo := by simpa [NR.before] using h_head
@@ -682,7 +654,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
         rcases hnr with hnr_eq | hnr_tail
         · rw [hnr_eq]; exact h_first_ge
         · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-            chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+            h_chain_drop.rel_cons hnr_tail
           exact le_trans h_first_ge h_nr_ge_first
     -- Apply the weak loop lemma - doesn't require Pairwise (initial :: after)
     exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
@@ -748,7 +720,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
           · rw [hnr_eq]
             exact h_first_ge
           · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-              chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+              h_chain_drop.rel_cons hnr_tail
             exact le_trans h_first_ge h_nr_ge_first
       have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
       simp only [List.mem_cons] at hy
@@ -808,7 +780,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
               rcases hnr with rfl | hnr_tail
               · exact h_first_ge
               · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-                  chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+                  h_chain_drop.rel_cons hnr_tail
                 exact le_trans h_first_ge h_nr_ge_first
           have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
           rw [h_loop_props.1]
@@ -844,7 +816,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
               rcases hnr with rfl | hnr_tail
               · exact h_first_ge
               · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-                  chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+                  h_chain_drop.rel_cons hnr_tail
                 exact le_trans h_first_ge h_nr_ge_first
           have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
           exact h_loop_props.2 y hy_tail
