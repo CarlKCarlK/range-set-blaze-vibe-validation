@@ -1280,14 +1280,13 @@ theorem internalAddC_extendPrev_safe_toSet
     calc s.ranges
       _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
       _ = before ++ after := by
+        have hDecomp' := hDecomp
+        rw [List.span_eq_takeWhile_dropWhile] at hDecomp'
+        simp only [Prod.mk.injEq] at hDecomp'
         have h1 : before = s.ranges.takeWhile p := by
-          rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-          simp only [Prod.mk.injEq] at hDecomp
-          exact hDecomp.1.symm
+          exact hDecomp'.1.symm
         have h2 : after = s.ranges.dropWhile p := by
-          rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-          simp only [Prod.mk.injEq] at hDecomp
-          exact hDecomp.2.symm
+          exact hDecomp'.2.symm
         rw [h1, h2]
 
   have h_s_toSet : s.toSet = algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after := by
