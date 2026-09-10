@@ -935,25 +935,27 @@ private def internalAddC_extendPrev_safe
     have hpw_res : List.Pairwise NR.before (res.fst :: res.snd) :=
       ok_deleteExtraNRs_loop_weak start' extended after h_extended_lo h_after_ge_start' hpw_after
 
+    have h_res_lo_ge : ∀ y ∈ (res.fst :: res.snd), start' ≤ y.val.lo := by
+      have h_loop_props := deleteExtraNRs_loop_lo_ge start' extended after h_extended_lo h_after_ge_start'
+      intro y hy
+      simp only [List.mem_cons] at hy
+      cases hy with
+      | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
+      | inr hmem => exact h_loop_props.2 y hmem
+
+    have h_init_before_prev : ∀ x ∈ init, NR.before x prev := by
+      intro x hx
+      have hcross_init_prev := (List.pairwise_append.mp hpw_before_prev).2.2
+      exact hcross_init_prev x hx prev (by simp)
+
     -- Prove cross-relations from init to (res.fst :: res.snd)
     have hcross : ∀ x ∈ init, ∀ y ∈ (res.fst :: res.snd), NR.before x y := by
       intro x hx y hy
-      -- From deleteExtraNRs_loop_lo_ge, y.val.lo ≥ start'
-      have h_loop_props := deleteExtraNRs_loop_lo_ge start' extended after h_extended_lo h_after_ge_start'
-      have h_y_ge : start' ≤ y.val.lo := by
-        simp only [List.mem_cons] at hy
-        cases hy with
-        | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
-        | inr hmem => exact h_loop_props.2 y hmem
-      -- From pairwise on before, x ≺ prev
-      have h_x_before_prev : NR.before x prev := by
-        have hcross_init_prev := (List.pairwise_append.mp hpw_before_prev).2.2
-        exact hcross_init_prev x hx prev (by simp)
       -- x.val.hi + 1 < prev.val.lo = start'
       have h_x_hi_lt_start' : x.val.hi + 1 < start' := by
-        simp only [start']; exact h_x_before_prev
+        simp only [start']; exact h_init_before_prev x hx
       -- Therefore x.val.hi + 1 < start' ≤ y.val.lo
-      exact lt_of_lt_of_le h_x_hi_lt_start' h_y_ge
+      exact lt_of_lt_of_le h_x_hi_lt_start' (h_res_lo_ge y hy)
 
     -- Apply pairwise_append to combine
     exact List.pairwise_append.mpr ⟨hpw_init, hpw_res, hcross⟩
