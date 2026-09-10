@@ -8,53 +8,12 @@ open IntRange
 open IntRange.NR
 open scoped IntRange.NR
 
-/-
-`Algo C` reimplementation that mirrors the production Rust insertion logic
-while operating directly on the `NR` and `RangeSetBlaze` structures.
-
-STATUS: Migrating away from unsafe constructors. Core invariant proofs COMPLETE!
-
-COMPLETED (Session 10):
-- ok_deleteExtraNRs: COMPLETE with hstop gap precondition
-- ok_deleteExtraNRs_loop: COMPLETE (strong version requiring Pairwise (current :: pending))
-- ok_deleteExtraNRs_loop_weak: COMPLETE (weak version requiring only Pairwise pending)
-- ok_internalAdd2NRs: COMPLETE with gap hypothesis (either before = [] or last has gap < start)
-- all_before_strict_before_start: Helper to propagate gap to all elements
-
-COMPLETED (Session 11):
-- Fixed unused variable warning in ok_deleteExtraNRs
-- Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
-- Moved internalAddC definition to after internalAdd2_safe (line 1134)
-- **Proved span_le_empty_implies_lt_empty**: Bridging lemma showing (≤ start) empty → (< start) empty
-- **Explored predicate unification** (Increment 8): Requires ~15-20 proof sections to be rewritten
-- **Created internalAdd2_safe_from_le** (Increment 9): Wrapper accepting (≤) gaps and converting to (<)
-- **Wired into internalAddC** (Increment 9): Both `none` and `some prev with gap` branches now use safe constructor
-
-Current status: 3 sorrys (was 2)
-- Line 60: mkNRUnsafe (intentional, to be eliminated)
-- Line 67: fromNRsUnsafe (intentional, to be eliminated)
-- Line ~1207: internalAdd2_safe_from_le conversion (new, needs proof)
-- Line ~1241: getLast? = some prev → getLast hne = prev (new, small lemma needed)
-
-The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
-  - none case: before = [] (gap holds vacuously) ✅ WIRED
-  - some prev with gap: prev.val.hi + 1 < start (gap provided directly) ✅ WIRED (with sorry)
-
-NEXT STEPS:
-
-**Immediate (to get back to 2 sorrys):**
-1. Prove getLast? = some x → getLast hne = x (simple List lemma)
-2. Prove (≤) last with gap → (<) last with gap in internalAdd2_safe_from_le
-   - Key insight: prev.hi + 1 < start implies prev.lo < start
-   - Need to show prev is in the (<) split and is its last element
-
-**Then:**
-3. Fix broken proofs in internalAddC_correct (they reference old internalAdd2 calls)
-4. Consider making extend-prev branch safe too (uses fromNRsUnsafe currently)
-
-Current unsafe constructors (to eventually remove):
-- mkNRUnsafe (line 39): Creates NR without proof
-- fromNRsUnsafe (line 46): Creates RangeSetBlaze without Pairwise proof
+/-!
+Algo C mirrors the production insertion algorithm over `NR` and `RangeSetBlaze`.
+It splits ranges on the lower endpoint and handles gap, covered, and
+extend-and-merge branches. Proof helpers establish `Pairwise NR.before` and
+exact set-union correctness. The executable branch structure is protected
+during proof refactoring.
 -/
 
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
