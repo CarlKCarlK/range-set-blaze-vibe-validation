@@ -875,23 +875,11 @@ theorem internalAdd2_safe_toSet
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
   (internalAdd2_safe s r hgap_lt).toSet = s.toSet ∪ r.toSet := by
   by_cases hempty : r.hi < r.lo
-  · -- empty range
-    have h_empty_set : r.toSet = (∅ : Set Int) := IntRange.toSet_eq_empty_of_hi_lt_lo hempty
-    simp [internalAdd2_safe, hempty, h_empty_set, Set.union_comm]
-  · -- non-empty range
-    have hle : r.lo ≤ r.hi := not_lt.mp hempty
-    have hsets := (internalAdd2NRs_preserves_order_and_union
-      s.ranges r.lo r.hi hle s.ok hgap_lt).2
-    simp only [internalAdd2_safe, hempty, dite_false]
-    -- fromNRs just wraps the list, so toSet unfolds to foldr
-    unfold fromNRs RangeSetBlaze.toSet
-    simp only []
-    -- Now both sides are foldr, use the list lemma
-    have h1 : algoCListSet (internalAdd2NRs s.ranges r.lo r.hi hle) =
-              (internalAdd2NRs s.ranges r.lo r.hi hle).foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
-    have h2 : algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
-    rw [← h1, ← h2, hsets]
-    simp [mkNR]
+  · simp [internalAdd2_safe, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
+  · simpa [internalAdd2_safe, hempty, fromNRs, RangeSetBlaze.toSet,
+      algoCListSet_eq_foldr, mkNR] using
+      (internalAdd2NRs_preserves_order_and_union
+        s.ranges r.lo r.hi (not_lt.mp hempty) s.ok hgap_lt).2
 
 /-- Bridge: the `_from_le` wrapper preserves the same set equality as `internalAdd2_safe`. -/
 theorem internalAdd2_safe_from_le_toSet
