@@ -550,17 +550,6 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   -- Now we have: before ++ (deleteExtraNRs_loop initial after).fst :: (deleteExtraNRs_loop initial after).snd
   -- where initial = mkNR inserted.lo (max inserted.hi stop) = mkNR start (max stop stop) = mkNR start stop
 
-  -- Simplify initial to show it equals inserted
-  have h_initial_eq :
-    let curr := inserted
-    let initialHi := max curr.val.hi stop
-    mkNR curr.val.lo initialHi (by
-      have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
-      have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
-      exact le_trans hcurr hmax) = mkNR start stop h_le := by
-    have : max stop stop = stop := max_self stop
-    simp only [inserted, mkNR, this]
-
   -- Set up for applying ok_deleteExtraNRs_loop
   set curr := inserted
   set initialHi := max curr.val.hi stop
@@ -588,11 +577,13 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
     simpa [p, split, after] using
       (span_suffix_all_ge_start_of_chain xs start hchain)
 
+  have h_initial_lo : initial.val.lo = start := by
+    simp [initial, curr, inserted, mkNR]
+  have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
+
   -- Step 3: Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (result.fst :: result.snd)
   -- The weak version only requires Pairwise on `after`, not on (initial :: after)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
-    have h_initial_lo : initial.val.lo = start := by
-      simp [initial, curr, inserted, mkNR]
     -- Apply the weak loop lemma - doesn't require Pairwise (initial :: after)
     exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
 
@@ -600,28 +591,11 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
     intro x hx y hy
     unfold NR.before
-    -- x ∈ before means x.lo < start (from span property)
-    have hx_lo : x.val.lo < start := by
-      -- before = xs.takeWhile p where p checks lo < start
-      have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-      have : before = xs.takeWhile p := by
-        have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-        simp [split, before] at this ⊢
-        exact this.1
-      rw [this] at hx
-      have := List.mem_takeWhile_imp hx
-      simp only [p, decide_eq_true_eq] at this
-      exact this
-
     -- y ∈ (result.fst :: result.snd) means y.lo ≥ start (from loop preservation)
-    have hy_lo : start ≤ y.val.lo := by
-      -- Use deleteExtraNRs_loop_lo_ge to show result elements have lo ≥ start
-      have h_initial_lo : initial.val.lo = start := by
-        simp [initial, curr, inserted, mkNR]
-      have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
-      simp only [List.mem_cons] at hy
-      rcases hy with hy_eq | hy_tail
-      · rw [hy_eq, h_loop_props.1]
+    have hy_ge : start ≤ y.val.lo := by
+      simp [result] at hy
+      rcases hy with rfl | hy_tail
+      · rw [h_loop_props.1]
       · exact h_loop_props.2 y hy_tail
 
     -- Need: x.hi + 1 < y.lo
@@ -639,21 +613,6 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
       -- Get: x.hi + 1 < start
       have hx_lt : x.val.hi + 1 < start := hall_before x hx
-
-      -- Get: start ≤ y.lo (all loop outputs have lo ≥ start)
-      have hy_ge : start ≤ y.val.lo := by
-        simp [result] at hy
-        rcases hy with rfl | hy_tail
-        · -- y = result.fst
-          have h_initial_lo : initial.val.lo = start := by
-            simp [initial, curr, inserted, mkNR]
-          have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
-          rw [h_loop_props.1]
-        · -- y ∈ result.snd
-          have h_initial_lo : initial.val.lo = start := by
-            simp [initial, curr, inserted, mkNR]
-          have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
-          exact h_loop_props.2 y hy_tail
 
       -- Conclude: x.hi + 1 < start ≤ y.lo, so x.hi + 1 < y.lo
       exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
