@@ -180,20 +180,9 @@ The `before` relation (no gap/overlap) implies `lo` ordering. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
     (h : List.Pairwise NR.before xs) :
     List.IsChain loLE xs := by
-  induction xs with
-  | nil => constructor
-  | cons x xs ih =>
-      cases xs with
-      | nil => constructor
-      | cons y ys =>
-          cases h with
-          | cons hxy hrest =>
-              have hchain_tail : List.IsChain loLE (y :: ys) := by
-                exact ih hrest
-              constructor
-              · unfold loLE
-                exact (NR.before_lo_lt (hxy y (by simp))).le
-              · exact hchain_tail
+  exact (h.imp fun hab => by
+    unfold loLE
+    exact (NR.before_lo_lt hab).le).isChain
 
 private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
