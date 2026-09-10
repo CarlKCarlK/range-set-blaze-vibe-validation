@@ -19,8 +19,6 @@ during proof refactoring.
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
-
-
 /-- Safe constructor when you already have the invariant. -/
 private def fromNRs (xs : List NR)
   (hok : List.Pairwise NR.before xs) : RangeSetBlaze :=
