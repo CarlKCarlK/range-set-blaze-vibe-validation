@@ -1,0 +1,227 @@
+{
+  "collector": "scripts/phase0_metrics.py",
+  "collector_sha256": "4db7973927010a84c2b69cf1eb02d81703050c2a7e5c9ac7a51cb125c12a6ef5",
+  "collector_version": 2,
+  "files": [
+    {
+      "active_code_loc": 76,
+      "blank_loc": 17,
+      "comment_only_loc": 2,
+      "defs_abbrev": 11,
+      "file": "Main.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 95,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 9,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 2,
+        "simpa": 5
+      },
+      "total_nonblank_loc": 78
+    },
+    {
+      "active_code_loc": 4,
+      "blank_loc": 1,
+      "comment_only_loc": 2,
+      "defs_abbrev": 0,
+      "file": "RangeSetBlaze.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 7,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 6
+    },
+    {
+      "active_code_loc": 805,
+      "blank_loc": 52,
+      "comment_only_loc": 33,
+      "defs_abbrev": 16,
+      "file": "RangeSetBlaze/AlgoB.lean",
+      "lemmas_theorems": 13,
+      "physical_loc": 890,
+      "private_lemmas_theorems": 1,
+      "tokens": {
+        "by_cases": 2,
+        "cases": 23,
+        "grind": 0,
+        "have": 173,
+        "linarith": 6,
+        "omega": 0,
+        "rw": 1,
+        "simp": 61,
+        "simpa": 37
+      },
+      "total_nonblank_loc": 838
+    },
+    {
+      "active_code_loc": 1477,
+      "blank_loc": 121,
+      "comment_only_loc": 217,
+      "defs_abbrev": 10,
+      "file": "RangeSetBlaze/AlgoC.lean",
+      "lemmas_theorems": 23,
+      "physical_loc": 1815,
+      "private_lemmas_theorems": 17,
+      "tokens": {
+        "by_cases": 13,
+        "cases": 29,
+        "grind": 0,
+        "have": 372,
+        "linarith": 0,
+        "omega": 5,
+        "rw": 141,
+        "simp": 140,
+        "simpa": 14
+      },
+      "total_nonblank_loc": 1694
+    },
+    {
+      "active_code_loc": 385,
+      "blank_loc": 58,
+      "comment_only_loc": 39,
+      "defs_abbrev": 14,
+      "file": "RangeSetBlaze/Basic.lean",
+      "lemmas_theorems": 23,
+      "physical_loc": 482,
+      "private_lemmas_theorems": 3,
+      "tokens": {
+        "by_cases": 5,
+        "cases": 5,
+        "grind": 0,
+        "have": 41,
+        "linarith": 3,
+        "omega": 0,
+        "rw": 1,
+        "simp": 23,
+        "simpa": 25
+      },
+      "total_nonblank_loc": 424
+    },
+    {
+      "active_code_loc": 1,
+      "blank_loc": 0,
+      "comment_only_loc": 0,
+      "defs_abbrev": 0,
+      "file": "RangeSetBlazeLean2.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 1,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 1
+    },
+    {
+      "active_code_loc": 1,
+      "blank_loc": 0,
+      "comment_only_loc": 0,
+      "defs_abbrev": 1,
+      "file": "RangeSetBlazeLean2/Basic.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 1,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 1
+    }
+  ],
+  "method": "comment-aware lexical fallback; see script module docstring",
+  "source_identity": {
+    "base_commit": "e4ab63bc654222973b24bdf2bfb88c6484648b8b",
+    "base_tree": "2d690317087c1359a30303ff549e6e32d4020500",
+    "mode": "working-tree",
+    "source_bytes_manifest": [
+      {
+        "file": "Main.lean",
+        "sha256": "d5cd1418fa342d7eaabae9f236b1e197d51ce28cb851b616e004f576fe22f8ec",
+        "size": 2962
+      },
+      {
+        "file": "RangeSetBlaze.lean",
+        "sha256": "b01f5194dbe377411330a7df27ebb9c98e724c93cd639d9e6b2d820b344bd42e",
+        "size": 240
+      },
+      {
+        "file": "RangeSetBlaze/AlgoB.lean",
+        "sha256": "eca4bd0af6753501a5368d6be0efb258c56414ad9445ffba9d1d5d8b640353b4",
+        "size": 35175
+      },
+      {
+        "file": "RangeSetBlaze/AlgoC.lean",
+        "sha256": "5b9dd876a071057c0db0cad76a54ddc9d0a015a092d574a5d31dd8b783061575",
+        "size": 83418
+      },
+      {
+        "file": "RangeSetBlaze/Basic.lean",
+        "sha256": "0dec44c9de5a1dbd6047f82f9ec3c792ef45c5ea086f901b8a993b0afe8d8f04",
+        "size": 17734
+      },
+      {
+        "file": "RangeSetBlazeLean2.lean",
+        "sha256": "ec5661114c666b36095ec6c2c9f9feafe41b56ade94c20aca8e7b0ef99b48074",
+        "size": 32
+      },
+      {
+        "file": "RangeSetBlazeLean2/Basic.lean",
+        "sha256": "a88fef4d3efa63c9f9f5c948dd5ba1de3ea09d828ce8388ee83fa3d039e734a4",
+        "size": 21
+      }
+    ],
+    "source_bytes_manifest_sha256": "759bc5949f27f74e86fc76106bcd7fbfe9084acd226759d563968efa514833c2"
+  },
+  "source_root": "/home/carlk/programs/range-set-blaze-lean2",
+  "token_totals": {
+    "by_cases": 20,
+    "cases": 57,
+    "grind": 0,
+    "have": 595,
+    "linarith": 9,
+    "omega": 5,
+    "rw": 143,
+    "simp": 226,
+    "simpa": 81
+  },
+  "totals": {
+    "active_code_loc": 2749,
+    "blank_loc": 249,
+    "comment_only_loc": 293,
+    "defs_abbrev": 52,
+    "lemmas_theorems": 59,
+    "physical_loc": 3291,
+    "private_lemmas_theorems": 21,
+    "total_nonblank_loc": 3042
+  }
+}

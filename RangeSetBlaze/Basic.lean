@@ -146,6 +146,11 @@ def before (a b : NR) : Prop := a.val.hi + 1 < b.val.lo
 
 scoped infixl:50 " ≺ " => NR.before
 
+/-- If `a` comes before `b`, then `a` starts strictly before `b` starts. -/
+lemma before_lo_lt {a b : NR} (h : a ≺ b) :
+    a.val.lo < b.val.lo := by
+  exact lt_of_le_of_lt a.property (lt_trans (lt_add_one _) h)
+
 instance : DecidableRel before :=
   fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
 

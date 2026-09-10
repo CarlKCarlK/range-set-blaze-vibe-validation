@@ -191,11 +191,8 @@ private lemma pairwise_before_implies_chain_loLE (xs : List NR)
               have hchain_tail : List.IsChain loLE (y :: ys) := by
                 exact ih hrest
               constructor
-              · unfold loLE NR.before at *
-                have : x.val.hi + 1 < y.val.lo := hxy y (by simp)
-                have : x.val.hi < y.val.lo := by linarith
-                have : x.val.lo ≤ x.val.hi := x.property
-                linarith
+              · unfold loLE
+                exact (NR.before_lo_lt (hxy y (by simp))).le
               · exact hchain_tail
 
 /-- If a list satisfies Pairwise and we decompose it as `pfx ++ [lastElem]`,
@@ -1243,16 +1240,10 @@ private def internalAddC_extendPrev_safe
       have h_prev_before_nr : NR.before prev nr := by
         apply h_cross prev _ nr hmem
         simp
-      -- NR.before prev nr means prev.val.hi + 1 < nr.val.lo
-      -- Therefore prev.val.lo ≤ prev.val.hi < prev.val.hi + 1 < nr.val.lo
-      have h_prev_hi_lt : prev.val.hi + 1 < nr.val.lo := h_prev_before_nr
-      have h_prev_lo_le_hi : prev.val.lo ≤ prev.val.hi := prev.property
-      have : start' < nr.val.lo := calc start'
-        _ = prev.val.lo := rfl
-        _ ≤ prev.val.hi := h_prev_lo_le_hi
-        _ < prev.val.hi + 1 := by omega
-        _ < nr.val.lo := h_prev_hi_lt
-      omega
+      have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
+        NR.before_lo_lt h_prev_before_nr
+      have : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
+      exact this.le
 
     -- Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (res.fst :: res.snd)
     -- Use start' = prev.val.lo as our reference point
@@ -1686,15 +1677,11 @@ theorem internalAddC_extendPrev_safe_toSet
     have h_prev_before_nr : NR.before prev nr := by
       apply h_cross prev _ nr hmem
       simp
-    have h_prev_hi_lt : prev.val.hi + 1 < nr.val.lo := h_prev_before_nr
-    have h_prev_lo_le_hi : prev.val.lo ≤ prev.val.hi := prev.property
     show start' ≤ nr.val.lo
-    have : start' < nr.val.lo := calc start'
-      _ = prev.val.lo := rfl
-      _ ≤ prev.val.hi := h_prev_lo_le_hi
-      _ < prev.val.hi + 1 := by omega
-      _ < nr.val.lo := h_prev_hi_lt
-    omega
+    have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
+      NR.before_lo_lt h_prev_before_nr
+    have h_start_lt : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
+    exact h_start_lt.le
 
   have h_loop_sets := deleteExtraNRs_loop_sets start' after extended h_extended_lo h_after_ge_start'
 
