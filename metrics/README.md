@@ -13,3 +13,10 @@ plausible character literals while leaving identifier primes in code.
 Only like-version comparisons are valid: compare v1 artifacts with v1
 artifacts, and v2 artifacts with v2 artifacts. The frozen Phase 0 files in
 `specs/` are likewise historical and must not be overwritten.
+
+Collector/schema v3 adds the dashboard documented in
+`specs/proof-metrics.md`. It retains the corrected-v2 scalar and `tokens`
+fields with their prior meanings and adds literal-masked, categorized counts
+under `dashboard` and `dashboard_totals`. Re-run v3 against an old Git ref to
+compare new dashboard fields historically; do not compare a v3 dashboard
+field to a v2 field merely because their labels resemble each other.
