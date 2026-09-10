@@ -653,6 +653,25 @@ theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.ge
     simp [hnil] at h
   exact ⟨hne, List.getLast_of_getLast?_eq_some h⟩
 
+/-- The last range in the non-strict start split starts no later than `start` and is sourced from `xs`. -/
+private lemma start_split_predecessor_le_and_mem
+    (xs : List NR) (start : Int) (prev : NR)
+    (hlast :
+      (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst.getLast? =
+        some prev) :
+    prev.val.lo ≤ start ∧ prev ∈ xs := by
+  have h_span :
+      (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst =
+        xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) :=
+    congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+  have ⟨hne, heq⟩ := getLast?_eq_some_getLast hlast
+  have h_prev_mem_take :
+      prev ∈ xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) := by
+    rw [← h_span, ← heq]
+    exact List.getLast_mem hne
+  have h_pred := List.mem_takeWhile_imp h_prev_mem_take
+  exact ⟨of_decide_eq_true h_pred, List.takeWhile_subset _ h_prev_mem_take⟩
+
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
 a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
 def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
@@ -887,21 +906,6 @@ private def internalAddC_extendPrev_safe
 
     -- Use start' := prev.val.lo as our reference point
     let start' := prev.val.lo
-
-    -- Prove prev.val.lo ≤ start from the takeWhile property
-    have h_prev_lo_le_start : prev.val.lo ≤ start := by
-      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
-      have h_prev_in_before : prev ∈ before := by
-        rw [← heq]; exact List.getLast_mem hne'
-      have h_before_eq : before = s.ranges.takeWhile p := by
-        have h_span : List.span p s.ranges = (before, after) := by
-          simpa [p] using hDecomp
-        rw [List.span_eq_takeWhile_dropWhile] at h_span
-        exact (congrArg Prod.fst h_span).symm
-      rw [h_before_eq] at h_prev_in_before
-      have := List.mem_takeWhile_imp h_prev_in_before
-      simp only [p, decide_eq_true_eq] at this
-      exact this
 
     -- Prove extended.val.lo = start' (trivial by definition)
     have h_extended_lo : extended.val.lo = start' := by
@@ -1305,19 +1309,13 @@ theorem internalAddC_extendPrev_safe_toSet
     simp only [algoCListSet_cons, algoCListSet_nil, Set.union_empty]
 
   -- Step 2: Show extended.toSet = prev.toSet ∪ r.toSet
-  have h_prev_lo_le_start : prev.val.lo ≤ start := by
-    have h_prev_in_before : prev ∈ before := by
-      rw [← heq]; exact List.getLast_mem hne'
-    let p := fun nr : NR => decide (nr.val.lo ≤ start)
-    have h_before_eq : before = s.ranges.takeWhile p := by
-      have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-      rw [this] at hDecomp
-      simp only [Prod.mk.injEq] at hDecomp
-      exact hDecomp.1.symm
-    rw [h_before_eq] at h_prev_in_before
-    have := List.mem_takeWhile_imp h_prev_in_before
-    simp only [p, decide_eq_true_eq] at this
-    exact this
+  have h_last_span :
+      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges).fst.getLast? =
+        some prev := by
+    rw [hDecomp]
+    exact hLast
+  have h_prev_lo_le_start : prev.val.lo ≤ start :=
+    (start_split_predecessor_le_and_mem s.ranges start prev h_last_span).1
 
   have h_extended_toSet : extended.val.toSet = prev.val.toSet ∪ r.toSet := by
     have horder : prev.val.lo ≤ r.lo := by rw [← hStartEq]; exact h_prev_lo_le_start
@@ -1397,27 +1395,9 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           rename_i prev h_last h_no_gap h_covered
           have h_r_covered : r.toSet ⊆ s.toSet := by
             -- prev is from getLast? of span (≤ r.lo), so prev.lo ≤ r.lo
-            have h_prev_lo_le : prev.val.lo ≤ r.lo := by
-              let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
-              have h_tw_nonempty : tw ≠ [] := by
-                intro h_empty
-                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
-                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
-                rw [h_span_eq, h_empty] at h_last
-                simp at h_last
-              have h_prev_mem : prev ∈ tw := by
-                have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
-                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
-                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
-                -- heq says: ((List.span ...).fst).getLast hne' = prev
-                -- We need: prev ∈ tw
-                -- Use heq to show tw contains the result of getLast
-                have h_tw_eq : tw = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := h_span_eq.symm
-                rw [h_tw_eq]
-                rw [← heq]
-                exact List.getLast_mem hne'
-              have h_pred := List.mem_takeWhile_imp h_prev_mem
-              exact of_decide_eq_true h_pred
+            have h_prev_props :=
+              start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
+            have h_prev_lo_le : prev.val.lo ≤ r.lo := h_prev_props.1
             -- r.hi ≤ prev.hi from h_covered
             have h_r_hi_le : r.hi ≤ prev.val.hi := h_covered
             -- Show r.toSet ⊆ prev.toSet ⊆ s.toSet
@@ -1426,30 +1406,14 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
               simp [IntRange.toSet] at hx ⊢
               exact ⟨le_trans h_prev_lo_le hx.1, le_trans hx.2 h_r_hi_le⟩
             have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
-              let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
-              have h_tw_nonempty : tw ≠ [] := by
-                intro h_empty
-                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
-                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
-                rw [h_span_eq, h_empty] at h_last
-                simp at h_last
-              have h_prev_mem : prev ∈ tw := by
-                have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
-                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
-                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
-                have h_tw_eq : tw = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := h_span_eq.symm
-                rw [h_tw_eq]
-                rw [← heq]
-                exact List.getLast_mem hne'
-              have h_prev_mem_ranges : prev ∈ s.ranges := by
-                exact List.takeWhile_subset _ h_prev_mem
               -- s.toSet = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by definition
               -- algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by algoCListSet_eq_foldr
               -- So algoCListSet s.ranges = s.toSet definitionally
               have h_algoC_eq_toSet : algoCListSet s.ranges = s.toSet := by
                 unfold RangeSetBlaze.toSet
                 rw [algoCListSet_eq_foldr]
-              have h_subset_algoC := nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_mem_ranges
+              have h_subset_algoC :=
+                nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_props.2
               rw [h_algoC_eq_toSet] at h_subset_algoC
               exact h_subset_algoC
             exact Set.Subset.trans h_r_subset_prev h_prev_in_s
