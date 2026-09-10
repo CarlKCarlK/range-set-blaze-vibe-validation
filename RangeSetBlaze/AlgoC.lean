@@ -196,76 +196,29 @@ private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : N
       | inr htail =>
           exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_algoCListSet xs nr htail) _
 
-/-- For ranges ordered by lower endpoint, every range in the suffix obtained by spanning while `lo < start` starts at or after `start`. -/
-private lemma span_suffix_all_ge_start_of_chain
+/-- In pairwise gap-separated ranges, every range after the strict-start split
+has lower endpoint at least `start`. -/
+private lemma strict_start_split_suffix_lower_bound
     (xs : List NR) (start : Int)
-    (hchain : List.IsChain loLE xs) :
+    (hpw : List.Pairwise NR.before xs) :
     let p : NR → Bool := fun nr => decide (nr.val.lo < start)
     let split := List.span p xs
     ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
-  classical
-  intro p split
-  have h_span : split = (xs.takeWhile p, xs.dropWhile p) :=
-    List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-  have h_take : split.fst = xs.takeWhile p := by
-    exact congrArg Prod.fst h_span
-  have h_drop : split.snd = xs.dropWhile p := by
-    exact congrArg Prod.snd h_span
-  have h_decomp : split.fst ++ split.snd = xs := by
-    have := List.takeWhile_append_dropWhile (p := p) (l := xs)
-    rw [h_take, h_drop]
-    exact this
-  intro nr hmem
-  have hchain_append :
-      List.IsChain loLE (split.fst ++ split.snd) := by
-    rw [h_decomp]
-    exact hchain
-  have hchain_suffix :
-      List.IsChain loLE split.snd :=
-    List.IsChain.right_of_append (l₁ := split.fst)
-      (l₂ := split.snd) hchain_append
-  cases hA : split.snd with
-  | nil =>
-      rw [hA] at hmem
-      cases hmem
-  | cons y ys =>
-      have hmem_cons : nr = y ∨ nr ∈ ys := by
-        rw [hA] at hmem
-        simp at hmem
-        exact hmem
-      have hy_head? :
-          (xs.dropWhile p).head? = some y := by
-        have : split.snd.head? = some y := by
-          rw [hA]
-          rfl
-        rw [← h_drop]
-        exact this
-      have hy_false : p y = false := by
-        have := List.head?_dropWhile_not (p := p) (l := xs)
-        rw [hy_head?] at this
-        simp at this
-        exact this
-      have hy_not_lt : ¬ y.val.lo < start := by
-        intro hy_lt
-        have hcontra : p y = true := by
-          unfold p
-          simp [hy_lt]
-        rw [hcontra] at hy_false
-        contradiction
-      have h_start_le_y : start ≤ y.val.lo :=
-        not_lt.mp hy_not_lt
-      have hchain_after : List.IsChain loLE (y :: ys) := by
-        rw [hA] at hchain_suffix
-        exact hchain_suffix
-      cases hmem_cons with
-      | inl hnr =>
-          subst hnr
-          exact h_start_le_y
-      | inr htail =>
-          have h_y_le_nr :
-              y.val.lo ≤ nr.val.lo :=
-            hchain_after.rel_cons htail
-          exact le_trans h_start_le_y h_y_le_nr
+  dsimp only
+  rw [List.span_eq_takeWhile_dropWhile]
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+      by_cases hx : x.val.lo < start
+      · rw [List.dropWhile_cons_of_pos (by simp [hx])]
+        exact ih hpw.tail
+      · rw [List.dropWhile_cons_of_neg (by simp [hx])]
+        intro nr hmem
+        rw [List.mem_cons] at hmem
+        rcases hmem with rfl | hmem
+        · exact not_lt.mp hx
+        · exact le_trans (not_lt.mp hx)
+            (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
 
 /-- One semantic contract for the scan: it preserves the represented union,
 keeps every output lower endpoint at or after the scan start, and preserves
@@ -527,10 +480,9 @@ private lemma internalAdd2NRs_preserves_order_and_union
       (by rw [h_after_eq]
           exact (List.dropWhile_sublist p : (xs.dropWhile p).Sublist xs)) hpw
 
-  have hchain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
   have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
     simpa [p, split, after] using
-      (span_suffix_all_ge_start_of_chain xs start hchain)
+      (strict_start_split_suffix_lower_bound xs start hpw)
 
   have h_initial_lo : initial.val.lo = start := by
     simp [initial, curr, inserted, mkNR]
