@@ -151,6 +151,15 @@ lemma before_lo_lt {a b : NR} (h : a ≺ b) :
     a.val.lo < b.val.lo := by
   exact lt_of_le_of_lt a.property (lt_trans (lt_add_one _) h)
 
+/-- In a pairwise-ordered append, the last element of the prefix comes before every element of the suffix. -/
+lemma getLast?_before_suffix {before after : List NR} {prev : NR}
+    (hpair : List.Pairwise NR.before (before ++ after))
+    (hlast : before.getLast? = some prev) :
+    ∀ nr ∈ after, prev ≺ nr := by
+  intro nr hnr
+  exact (List.pairwise_append.mp hpair).2.2 prev
+    (List.mem_of_mem_getLast? (by simp [hlast])) nr hnr
+
 instance : DecidableRel before :=
   fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
 

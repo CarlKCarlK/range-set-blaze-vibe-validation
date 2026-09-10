@@ -1228,18 +1228,9 @@ private def internalAddC_extendPrev_safe
       -- From s.ok, we have Pairwise on before ++ after
       have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
         rw [← h_s_decomp]; exact s.ok
-      -- prev is the last element of before
-      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
-      have h_before_decomp : before = init ++ [prev] := by
-        have : before = before.dropLast ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
-        rw [heq] at this
-        exact this
       -- From Pairwise on before ++ after, we get that prev ≺ nr for all nr ∈ after
-      rw [h_before_decomp] at h_ok_decomp
-      have h_cross := (List.pairwise_append.mp h_ok_decomp).2.2
-      have h_prev_before_nr : NR.before prev nr := by
-        apply h_cross prev _ nr hmem
-        simp
+      have h_prev_before_nr : NR.before prev nr :=
+        NR.getLast?_before_suffix h_ok_decomp hLast nr hmem
       have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
         NR.before_lo_lt h_prev_before_nr
       have : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
@@ -1672,11 +1663,8 @@ theorem internalAddC_extendPrev_safe_toSet
     -- From Pairwise on s.ranges and prev being last of before
     have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
       rw [← h_s_ranges_decomp]; exact s.ok
-    rw [h_before_decomp] at h_ok_decomp
-    have h_cross := (List.pairwise_append.mp h_ok_decomp).2.2
-    have h_prev_before_nr : NR.before prev nr := by
-      apply h_cross prev _ nr hmem
-      simp
+    have h_prev_before_nr : NR.before prev nr :=
+      NR.getLast?_before_suffix h_ok_decomp hLast nr hmem
     show start' ≤ nr.val.lo
     have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
       NR.before_lo_lt h_prev_before_nr
