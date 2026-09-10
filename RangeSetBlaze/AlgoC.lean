@@ -608,43 +608,52 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
   exact List.pairwise_append.mpr ⟨hpw_before, hpw_result, hcross⟩
 
-/-- If the (≤ start) split is empty, then the (< start) split is also empty.
-This is because `< start` is strictly stronger than `≤ start`. -/
-private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
-    (h_le_empty : (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst = []) :
-    (List.span (fun nr => decide (nr.val.lo < start)) xs).fst = [] := by
-  -- Convert both spans to takeWhile
-  have h_le_eq := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo ≤ start)) (l := xs)
-  have h_lt_eq := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs)
-
-  have h_le_take : xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) = [] := by
-    have : (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst =
-           xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) := by
-      rw [h_le_eq]
-    rw [h_le_empty] at this
-    exact this.symm
-
-  -- Show takeWhile (< start) is also empty
-  have h_lt_take : xs.takeWhile (fun nr => decide (nr.val.lo < start)) = [] := by
-    cases hxs : xs with
-    | nil => simp [List.takeWhile]
-    | cons hd tl =>
-      -- If takeWhile (≤ start) is empty, then hd doesn't satisfy (≤ start)
-      have h_hd_not_le : ¬(hd.val.lo ≤ start) := by
-        rw [hxs] at h_le_take
-        simp [List.takeWhile] at h_le_take
-        by_contra h_le
-        simp [h_le] at h_le_take
-      -- Therefore hd doesn't satisfy (< start) either
-      have h_hd_not_lt : ¬(hd.val.lo < start) := fun h => h_hd_not_le (le_of_lt h)
-      -- So takeWhile (< start) stops immediately
-      simp [List.takeWhile, h_hd_not_lt]
-
-  -- Convert back to span
-  have : (List.span (fun nr => decide (nr.val.lo < start)) xs).fst =
-         xs.takeWhile (fun nr => decide (nr.val.lo < start)) := by
-    rw [h_lt_eq]
-  rw [this, h_lt_take]
+/-- In an ordered range list, a strict gap after the non-strict start prefix
+makes that whole prefix strict, so the two start prefixes have the same gap. -/
+private theorem nonstrict_start_gap_implies_strict_start_gap
+    (xs : List NR) (start : Int)
+    (hpair : List.Pairwise NR.before xs)
+    (hgap_le :
+      let before := (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst
+      before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start) :
+    let before := (List.span (fun nr => decide (nr.val.lo < start)) xs).fst
+    before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
+  simp only [List.span_eq_takeWhile_dropWhile] at hgap_le ⊢
+  let strict : NR → Bool := fun nr => decide (nr.val.lo < start)
+  let nonstrict : NR → Bool := fun nr => decide (nr.val.lo ≤ start)
+  let hasGap : List NR → Prop := fun before =>
+    before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start
+  change hasGap (xs.takeWhile nonstrict) at hgap_le
+  change hasGap (xs.takeWhile strict)
+  have h_nested :
+      xs.takeWhile strict = (xs.takeWhile nonstrict).takeWhile strict := by
+    rw [List.takeWhile_takeWhile]
+    congr 2
+    funext nr
+    simp [strict, nonstrict]
+    exact le_of_lt
+  rcases hgap_le with h_empty | ⟨hne, hlast⟩
+  · left
+    rw [h_nested, h_empty]
+    simp
+  · have hpair_lo : List.Pairwise (fun a b : NR => a.val.lo ≤ b.val.lo)
+        (xs.takeWhile nonstrict) :=
+      (List.Pairwise.sublist (List.takeWhile_sublist nonstrict) hpair).imp
+        fun hab => (NR.before_lo_lt hab).le
+    have hlast_lo : ((xs.takeWhile nonstrict).getLast hne).val.lo < start :=
+      lt_of_le_of_lt ((xs.takeWhile nonstrict).getLast hne).property
+        (lt_trans (lt_add_one _) hlast)
+    have hall_strict : ∀ nr ∈ xs.takeWhile nonstrict, strict nr := by
+      intro nr hnr
+      exact decide_eq_true
+        (lt_of_le_of_lt (hpair_lo.rel_getLast hnr) hlast_lo)
+    have hprefix_eq : (xs.takeWhile nonstrict).takeWhile strict =
+        xs.takeWhile nonstrict :=
+      List.takeWhile_eq_self_iff.mpr hall_strict
+    have heq : xs.takeWhile strict = xs.takeWhile nonstrict :=
+      h_nested.trans hprefix_eq
+    exact heq.symm ▸
+      (show hasGap (xs.takeWhile nonstrict) from Or.inr ⟨hne, hlast⟩)
 
 -- Helper lemma: getLast? = some implies getLast returns the same value
 theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.getLast? = some x) :
@@ -699,146 +708,8 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
       let before := split.fst
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
     RangeSetBlaze :=
-  -- Convert the (≤) gap to (<) gap
-  have hgap_lt : let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
-                 let before := split.fst
-                 before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo := by
-    cases hgap_le with
-    | inl h_empty =>
-        -- The (≤ start) split is empty, so the (< start) split is also empty
-        left
-        exact span_le_empty_implies_lt_empty s.ranges r.lo h_empty
-    | inr h =>
-        -- Nonempty (≤) split with a gap at its last element
-        obtain ⟨hne_le, h_gap⟩ := h
-        let split_le := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
-        let before_le := split_le.fst
-        let split_lt := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
-        let before_lt := split_lt.fst
-
-        -- Key: x = last of (≤ split) has x.hi + 1 < r.lo, so x.lo < r.lo
-        let x := before_le.getLast hne_le
-        have hx_gap : x.val.hi + 1 < r.lo := h_gap
-        have hx_prop : x.val.lo ≤ x.val.hi := x.property
-        have hx_lt : x.val.lo < r.lo := calc x.val.lo
-          _ ≤ x.val.hi := hx_prop
-          _ < x.val.hi + 1 := by omega
-          _ < r.lo := hx_gap
-
-        -- The two splits are equal (both cut at the same point)
-        have before_eq : before_lt = before_le := by
-          unfold before_lt split_lt before_le split_le
-          simp only [List.span_eq_takeWhile_dropWhile]
-          -- Prove that takeWhile (< r.lo) consumes exactly the same prefix as takeWhile (≤ r.lo)
-          -- Key: the last element x of before_le satisfies x.lo < r.lo (proven above)
-          -- Strategy: show both takeWhile operations stop at the same place
-          have key : ∀ nr ∈ s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)), nr.val.lo < r.lo := by
-            intro nr hnr
-            -- All elements in before_le satisfy nr.lo ≤ r.lo (by definition of takeWhile)
-            have h_le : nr.val.lo ≤ r.lo := by
-              have h_pred := List.mem_takeWhile_imp hnr
-              exact of_decide_eq_true h_pred
-            -- If nr = x (the last element), we have nr.lo < r.lo by hx_lt
-            by_cases h_eq : nr = x
-            · rw [h_eq]; exact hx_lt
-            · -- If nr ≠ x, then nr appears before x in the list
-              -- Since s.ranges is Pairwise (· ≺ ·) and x is the last in before_le,
-              -- we have nr.val.hi + 1 < x.val.lo, so nr.lo ≤ nr.hi < x.lo < r.lo
-
-              -- First establish that before_le equals the takeWhile result
-              have before_le_eq : before_le = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
-                unfold before_le split_le
-                simp only [List.span_eq_takeWhile_dropWhile]
-
-              -- Decompose before_le as init ++ [x]
-              have h_decomp : ∃ init, before_le = init ++ [x] := by
-                use before_le.dropLast
-                exact (List.dropLast_append_getLast hne_le).symm
-              obtain ⟨init, h_init⟩ := h_decomp
-
-              -- nr is in init (since nr ∈ before_le and nr ≠ x)
-              have hnr_init : nr ∈ init := by
-                have hnr_before : nr ∈ before_le := by rw [before_le_eq]; exact hnr
-                rw [h_init] at hnr_before
-                simp at hnr_before
-                cases hnr_before with
-                | inl h => exact h
-                | inr h => exact absurd h h_eq
-
-              -- Get Pairwise property on s.ranges, then restrict to takeWhile
-              have h_pw_take : List.Pairwise (· ≺ ·) (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
-                have h_decomp : s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
-                                s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) = s.ranges :=
-                  List.takeWhile_append_dropWhile
-                have h_ok_decomp : List.Pairwise (· ≺ ·) (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
-                                                           s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
-                  rw [h_decomp]; exact s.ok
-                exact (List.pairwise_append.mp h_ok_decomp).1
-
-              -- Now apply it to before_le
-              have h_pw_before : List.Pairwise (· ≺ ·) before_le := by
-                rw [before_le_eq]
-                exact h_pw_take
-
-              -- Apply Pairwise relation from the prefix to the final element
-              rw [h_init] at h_pw_before
-              have h_before : nr ≺ x := by
-                have hnr_drop : nr ∈ (init ++ [x]).dropLast := by
-                  simpa using hnr_init
-                simpa using h_pw_before.rel_dropLast_getLast hnr_drop
-
-              -- Unfold the definition of ≺
-              have : nr.val.hi + 1 < x.val.lo := h_before
-
-              calc nr.val.lo
-                _ ≤ nr.val.hi := nr.property
-                _ < nr.val.hi + 1 := by omega
-                _ < x.val.lo := this
-                _ < r.lo := hx_lt
-
-          -- Now prove the two takeWhile results are equal
-          -- Key insight: every element in takeWhile (≤ r.lo) also satisfies (< r.lo)
-          -- We'll use the `key` lemma which applies to s.ranges specifically
-          suffices h_suff : ∀ (xs : List NR),
-              (∀ nr ∈ xs.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)), nr.val.lo < r.lo) →
-              xs.takeWhile (fun nr => decide (nr.val.lo < r.lo)) =
-              xs.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) by
-            exact h_suff s.ranges key
-          intro xs hkey
-          induction xs with
-          | nil =>
-              simp [List.takeWhile]
-          | cons hd tl ih =>
-              simp only [List.takeWhile]
-              by_cases h_hd_le : decide (hd.val.lo ≤ r.lo) = true
-              · -- hd satisfies (≤ r.lo), so it should also satisfy (< r.lo)
-                have h_hd_lt : decide (hd.val.lo < r.lo) = true := by
-                  have h_hd_mem : hd ∈ (hd :: tl).takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
-                    simp [List.takeWhile, h_hd_le]
-                  have : hd.val.lo < r.lo := hkey hd h_hd_mem
-                  exact decide_eq_true this
-                simp [h_hd_le, h_hd_lt]
-                apply ih
-                intro nr hnr
-                have : nr ∈ (hd :: tl).takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
-                  simp [List.takeWhile, h_hd_le]
-                  right
-                  exact hnr
-                exact hkey nr this
-              · -- hd doesn't satisfy (≤ r.lo), so it doesn't satisfy (< r.lo) either
-                have h_hd_not_lt : decide (hd.val.lo < r.lo) = false := by
-                  simp [decide_eq_false_iff_not, not_lt] at h_hd_le ⊢
-                  omega
-                simp [h_hd_le, h_hd_not_lt]
-
-        -- Provide the gap witness
-        right
-        have hne_lt : before_lt ≠ [] := by intro h; rw [before_eq] at h; exact hne_le h
-        use hne_lt
-        show (split_lt.fst.getLast hne_lt).val.hi + 1 < r.lo
-        simp only [split_lt, before_lt, split_le, before_le, before_eq]
-        exact h_gap
-  internalAdd2_safe s r hgap_lt
+  internalAdd2_safe s r
+    (nonstrict_start_gap_implies_strict_start_gap s.ranges r.lo s.ok hgap_le)
 
 /-- The extend-predecessor helper has two proof clients: its executable
 wrapper needs the ordering invariant, while the public correctness theorem
@@ -1273,9 +1144,8 @@ theorem internalAdd2_safe_from_le_toSet
       let before := split.fst
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
   (internalAdd2_safe_from_le s r hgap_le).toSet = s.toSet ∪ r.toSet := by
-  -- unfold and convert the hypothesis using span_le_empty_implies_lt_empty
+  -- The wrapper's named gap conversion supplies `internalAdd2_safe` directly.
   unfold internalAdd2_safe_from_le
-  -- The conversion is already done in the definition, just apply the theorem
   exact internalAdd2_safe_toSet s r _
 
 /-- Set-correctness for the extend-prev branch. -/
