@@ -840,6 +840,141 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
         exact h_gap
   internalAdd2_safe s r hgap_lt
 
+/-- The extend-predecessor helper has two proof clients: its executable
+wrapper needs the ordering invariant, while the public correctness theorem
+needs exact set semantics.  This specification derives the split,
+predecessor decomposition, and predecessor-to-suffix boundary once, then
+exposes both guarantees as projections. -/
+private lemma extend_predecessor_preserves_order_and_union
+    (s : RangeSetBlaze)
+    (start stop : Int)
+    (before after : List NR) (prev : NR)
+    (hDecomp :
+      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges
+        = (before, after)))
+    (hLast : List.getLast? before = some prev)
+    (hNoGap : ¬ (prev.val.hi + 1 < start))
+    (hExtend : prev.val.hi < stop) :
+    let init := before.dropLast
+    let extendedHi := max prev.val.hi stop
+    let extended := mkNR prev.val.lo extendedHi (by
+      exact le_trans prev.property (le_max_left _ _))
+    let res := deleteExtraNRs_loop extended after
+    let newRanges := init ++ res.fst :: res.snd
+    List.Pairwise NR.before newRanges ∧
+      algoCListSet newRanges = s.toSet ∪
+        (mkNR start stop (by
+          omega)).val.toSet := by
+  intro init extendedHi extended res newRanges
+  have hne : before ≠ [] := by
+    intro h
+    simp [h] at hLast
+  let p := fun nr : NR => decide (nr.val.lo ≤ start)
+  have h_s_decomp : s.ranges = before ++ after := by
+    have h_span : List.span p s.ranges = (before, after) := by
+      simpa [p] using hDecomp
+    rw [List.span_eq_takeWhile_dropWhile] at h_span
+    calc s.ranges
+      _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p :=
+        (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
+      _ = before ++ after := by
+        have h1 : s.ranges.takeWhile p = before := by
+          simpa using congrArg Prod.fst h_span
+        have h2 : s.ranges.dropWhile p = after := by
+          simpa using congrArg Prod.snd h_span
+        rw [h1, h2]
+  have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
+    rw [← h_s_decomp]
+    exact s.ok
+  have hpw_before : List.Pairwise NR.before before :=
+    (List.pairwise_append.mp h_ok_decomp).1
+  have hpw_after : List.Pairwise NR.before after :=
+    (List.pairwise_append.mp h_ok_decomp).2.1
+  have heq : before.getLast hne = prev :=
+    List.getLast_of_getLast?_eq_some hLast
+  have h_before_decomp : before = init ++ [prev] := by
+    have h := (List.dropLast_append_getLast hne).symm
+    rw [heq] at h
+    exact h
+  have hpw_before_prev : List.Pairwise NR.before (init ++ [prev]) := by
+    rw [← h_before_decomp]
+    exact hpw_before
+  have hpw_init : List.Pairwise NR.before init :=
+    (List.pairwise_append.mp hpw_before_prev).1
+  have h_prev_before_after : ∀ nr ∈ after, NR.before prev nr := by
+    intro nr hmem
+    exact NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
+  let start' := prev.val.lo
+  have h_extended_lo : extended.val.lo = start' := by
+    simp only [extended, mkNR, start']
+  have h_after_ge_start' : ∀ nr ∈ after, start' ≤ nr.val.lo := by
+    intro nr hmem
+    have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
+      NR.before_lo_lt (h_prev_before_after nr hmem)
+    have h_start_lt : start' < nr.val.lo := by
+      simpa [start'] using h_prev_lo_lt
+    exact h_start_lt.le
+  have hpw_res : List.Pairwise NR.before (res.fst :: res.snd) :=
+    ok_deleteExtraNRs_loop_weak start' extended after h_extended_lo
+      h_after_ge_start' hpw_after
+  have h_res_lo_ge : ∀ y ∈ (res.fst :: res.snd), start' ≤ y.val.lo := by
+    have h_loop_props :=
+      deleteExtraNRs_loop_lo_ge start' extended after h_extended_lo h_after_ge_start'
+    intro y hy
+    simp only [List.mem_cons] at hy
+    cases hy with
+    | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
+    | inr hmem => exact h_loop_props.2 y hmem
+  have h_init_before_prev : ∀ x ∈ init, NR.before x prev := by
+    intro x hx
+    exact (List.pairwise_append.mp hpw_before_prev).2.2 x hx prev (by simp)
+  have hcross : ∀ x ∈ init, ∀ y ∈ (res.fst :: res.snd), NR.before x y := by
+    intro x hx y hy
+    have h_x_hi_lt_start' : x.val.hi + 1 < start' := by
+      simpa [start', NR.before] using h_init_before_prev x hx
+    exact lt_of_lt_of_le h_x_hi_lt_start' (h_res_lo_ge y hy)
+  have hpw_newRanges : List.Pairwise NR.before newRanges :=
+    List.pairwise_append.mpr ⟨hpw_init, hpw_res, hcross⟩
+  have h_last_span :
+      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges).fst.getLast? =
+        some prev := by
+    rw [hDecomp]
+    exact hLast
+  have h_prev_lo_le_start : prev.val.lo ≤ start :=
+    (start_split_predecessor_le_and_mem s.ranges start prev h_last_span).1
+  have h_start_stop : start ≤ stop := by
+    have h_start : start ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
+    omega
+  let inserted := mkNR start stop h_start_stop
+  have h_extended_toSet : extended.val.toSet = prev.val.toSet ∪ inserted.val.toSet := by
+    have horder : prev.val.lo ≤ inserted.val.lo := by
+      simpa [inserted, mkNR] using h_prev_lo_le_start
+    have htouch : ¬ (prev.val.hi + 1 < inserted.val.lo) := by
+      simpa [inserted, mkNR] using hNoGap
+    simpa [extended, extendedHi, inserted, mkNR] using
+      (merge_step_sets prev inserted horder htouch).symm
+  have h_s_toSet : s.toSet = algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after := by
+    have h_s_ranges : s.toSet = algoCListSet s.ranges := by
+      unfold RangeSetBlaze.toSet
+      rfl
+    rw [h_s_ranges, h_s_decomp, h_before_decomp]
+    rw [algoCListSet_append, algoCListSet_append]
+    simp only [algoCListSet_cons, algoCListSet_nil, Set.union_empty]
+  constructor
+  · exact hpw_newRanges
+  · calc
+      algoCListSet newRanges
+        = algoCListSet (init ++ res.fst :: res.snd) := rfl
+      _ = algoCListSet init ∪ algoCListSet (res.fst :: res.snd) :=
+        algoCListSet_append init (res.fst :: res.snd)
+      _ = algoCListSet init ∪ (extended.val.toSet ∪ algoCListSet after) := by
+        rw [deleteExtraNRs_loop_sets start' after extended h_extended_lo h_after_ge_start']
+      _ = algoCListSet init ∪ ((prev.val.toSet ∪ inserted.val.toSet) ∪ algoCListSet after) := by
+        rw [h_extended_toSet]
+      _ = (algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after) ∪ inserted.val.toSet := by
+        ac_rfl
+      _ = s.toSet ∪ inserted.val.toSet := by rw [h_s_toSet]
+
 /-- Safe extend when `prev` touches/overlaps `r` and `r.hi > prev.hi`.
     We replace `prev` by `extended := [prev.lo, max prev.hi r.hi]` and
     run the same loop on the tail. -/
@@ -853,114 +988,17 @@ private def internalAddC_extendPrev_safe
     (hLast : List.getLast? before = some prev)
     (_hNoGap : ¬ (prev.val.hi + 1 < start))
     (_hExtend : prev.val.hi < stop) :
-    RangeSetBlaze :=
-  -- Decompose before = init ++ [prev]
-  -- Since getLast? before = some prev, we know before is non-empty
-  have hne : before ≠ [] := by
-    intro h; simp [h] at hLast
+    RangeSetBlaze := by
   let init := before.dropLast
-  -- Create extended range that merges prev with r
   let extendedHi := max prev.val.hi stop
   have hExtendedValid : prev.val.lo ≤ extendedHi := by
-    have := prev.property
-    exact le_trans this (le_max_left _ _)
+    exact le_trans prev.property (le_max_left _ _)
   let extended := mkNR prev.val.lo extendedHi hExtendedValid
-  -- Run deleteExtraNRs_loop to merge with after
   let res := deleteExtraNRs_loop extended after
-  -- Build the result
   let newRanges := init ++ res.fst :: res.snd
-  -- Prove Pairwise on newRanges
-  have hpw_newRanges : List.Pairwise NR.before newRanges := by
-    let p := fun nr : NR => decide (nr.val.lo ≤ start)
-    have h_s_decomp : s.ranges = before ++ after := by
-      have h_span : List.span p s.ranges = (before, after) := by
-        simpa [p] using hDecomp
-      rw [List.span_eq_takeWhile_dropWhile] at h_span
-      calc s.ranges
-        _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p :=
-          (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
-        _ = before ++ after := by
-          have h1 : s.ranges.takeWhile p = before := by
-            simpa using congrArg Prod.fst h_span
-          have h2 : s.ranges.dropWhile p = after := by
-            simpa using congrArg Prod.snd h_span
-          rw [h1, h2]
-    have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
-      rw [← h_s_decomp]
-      exact s.ok
-
-    -- Extract Pairwise for before from s.ok using span decomposition
-    have hpw_before : List.Pairwise NR.before before := by
-      exact (List.pairwise_append.mp h_ok_decomp).1
-
-    have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
-    have h_before_decomp : before = init ++ [prev] := by
-      have : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
-      rw [heq] at this
-      exact this
-    have hpw_before_prev : List.Pairwise NR.before (init ++ [prev]) := by
-      rw [← h_before_decomp]
-      exact hpw_before
-
-    -- Extract Pairwise for init using dropLast
-    have hpw_init : List.Pairwise NR.before init := by
-      exact (List.pairwise_append.mp hpw_before_prev).1
-
-    -- Extract Pairwise for after from s.ok
-    have hpw_after : List.Pairwise NR.before after := by
-      exact (List.pairwise_append.mp h_ok_decomp).2.1
-
-    -- Use start' := prev.val.lo as our reference point
-    let start' := prev.val.lo
-
-    -- Prove extended.val.lo = start' (trivial by definition)
-    have h_extended_lo : extended.val.lo = start' := by
-      simp only [extended, mkNR, start']
-
-    -- Prove ∀ nr ∈ after, start' ≤ nr.val.lo using Pairwise
-    -- Since prev is the last element of before and s.ranges = before ++ after,
-    -- all elements in after come after prev in the Pairwise ordering
-    have h_after_ge_start' : ∀ nr ∈ after, start' ≤ nr.val.lo := by
-      intro nr hmem
-      -- From Pairwise on before ++ after, we get that prev ≺ nr for all nr ∈ after
-      have h_prev_before_nr : NR.before prev nr :=
-        NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
-      have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
-        NR.before_lo_lt h_prev_before_nr
-      have : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
-      exact this.le
-
-    -- Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (res.fst :: res.snd)
-    -- Use start' = prev.val.lo as our reference point
-    have hpw_res : List.Pairwise NR.before (res.fst :: res.snd) :=
-      ok_deleteExtraNRs_loop_weak start' extended after h_extended_lo h_after_ge_start' hpw_after
-
-    have h_res_lo_ge : ∀ y ∈ (res.fst :: res.snd), start' ≤ y.val.lo := by
-      have h_loop_props := deleteExtraNRs_loop_lo_ge start' extended after h_extended_lo h_after_ge_start'
-      intro y hy
-      simp only [List.mem_cons] at hy
-      cases hy with
-      | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
-      | inr hmem => exact h_loop_props.2 y hmem
-
-    have h_init_before_prev : ∀ x ∈ init, NR.before x prev := by
-      intro x hx
-      have hcross_init_prev := (List.pairwise_append.mp hpw_before_prev).2.2
-      exact hcross_init_prev x hx prev (by simp)
-
-    -- Prove cross-relations from init to (res.fst :: res.snd)
-    have hcross : ∀ x ∈ init, ∀ y ∈ (res.fst :: res.snd), NR.before x y := by
-      intro x hx y hy
-      -- x.val.hi + 1 < prev.val.lo = start'
-      have h_x_hi_lt_start' : x.val.hi + 1 < start' := by
-        simp only [start']; exact h_init_before_prev x hx
-      -- Therefore x.val.hi + 1 < start' ≤ y.val.lo
-      exact lt_of_lt_of_le h_x_hi_lt_start' (h_res_lo_ge y hy)
-
-    -- Apply pairwise_append to combine
-    exact List.pairwise_append.mpr ⟨hpw_init, hpw_res, hcross⟩
-
-  fromNRs newRanges hpw_newRanges
+  have hspec := extend_predecessor_preserves_order_and_union s start stop before after prev
+    hDecomp hLast _hNoGap _hExtend
+  exact fromNRs newRanges hspec.1
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
@@ -1251,107 +1289,19 @@ theorem internalAddC_extendPrev_safe_toSet
     (hExtend : prev.val.hi < stop)
     (hStartEq : start = r.lo)
     (hStopEq : stop = r.hi) :
-  (internalAddC_extendPrev_safe s r start stop before after prev hDecomp hLast hNoGap hExtend).toSet
+    (internalAddC_extendPrev_safe s r start stop before after prev hDecomp hLast hNoGap hExtend).toSet
     = s.toSet ∪ r.toSet := by
-  -- Unfold the definition
+  have hspec := extend_predecessor_preserves_order_and_union s start stop before after prev
+    hDecomp hLast hNoGap hExtend
+  have h_start_stop : start ≤ stop := by
+    have h_start : start ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
+    omega
+  have h_interval : (mkNR start stop h_start_stop).val.toSet = r.toSet := by
+    simp [mkNR, IntRange.toSet, hStartEq, hStopEq]
   unfold internalAddC_extendPrev_safe
-  simp only [fromNRs]
-  rw [RangeSetBlaze.toSet_eq_listToSet]
-
-  -- Set up the local definitions from the function body
-  have hne : before ≠ [] := by intro h; simp [h] at hLast
-  let init := before.dropLast
-  let extendedHi := max prev.val.hi stop
-  have hExtendedValid : prev.val.lo ≤ extendedHi := by
-    have := prev.property
-    exact le_trans this (le_max_left _ _)
-  let extended := mkNR prev.val.lo extendedHi hExtendedValid
-  let res := deleteExtraNRs_loop extended after
-  let newRanges := init ++ res.fst :: res.snd
-
-  -- Step 1: Decompose s.toSet
-  -- We have s.ranges = before ++ after and before = init ++ [prev]
-  have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
-  have h_before_decomp : before = init ++ [prev] := by
-    have : before = before.dropLast ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
-    rw [heq] at this
-    exact this
-
-  have h_s_ranges_decomp : s.ranges = before ++ after := by
-    let p := fun nr : NR => decide (nr.val.lo ≤ start)
-    have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-    calc s.ranges
-      _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
-      _ = before ++ after := by
-        have hDecomp' := hDecomp
-        rw [List.span_eq_takeWhile_dropWhile] at hDecomp'
-        simp only [Prod.mk.injEq] at hDecomp'
-        have h1 : before = s.ranges.takeWhile p := by
-          exact hDecomp'.1.symm
-        have h2 : after = s.ranges.dropWhile p := by
-          exact hDecomp'.2.symm
-        rw [h1, h2]
-
-  have h_s_toSet : s.toSet = algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after := by
-    have : s.toSet = algoCListSet s.ranges := RangeSetBlaze.toSet_eq_listToSet s
-    rw [this, h_s_ranges_decomp, h_before_decomp]
-    rw [algoCListSet_append, algoCListSet_append]
-    simp only [algoCListSet_cons, algoCListSet_nil, Set.union_empty]
-
-  -- Step 2: Show extended.toSet = prev.toSet ∪ r.toSet
-  have h_last_span :
-      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges).fst.getLast? =
-        some prev := by
-    rw [hDecomp]
-    exact hLast
-  have h_prev_lo_le_start : prev.val.lo ≤ start :=
-    (start_split_predecessor_le_and_mem s.ranges start prev h_last_span).1
-
-  have h_extended_toSet : extended.val.toSet = prev.val.toSet ∪ r.toSet := by
-    have horder : prev.val.lo ≤ r.lo := by rw [← hStartEq]; exact h_prev_lo_le_start
-    have htouch : ¬ (prev.val.hi + 1 < r.lo) := by rw [← hStartEq]; exact hNoGap
-    have h_r_valid : r.lo ≤ r.hi := by
-      rw [← hStartEq, ← hStopEq]
-      calc start ≤ prev.val.hi + 1 := not_lt.mp hNoGap
-        _ ≤ stop := by have := hExtend; omega
-    have h_max_stop_eq_rhi : max prev.val.hi stop = r.hi := by
-      rw [← hStopEq, max_eq_right]; exact le_of_lt hExtend
-    have h_max_rhi_eq_rhi : max prev.val.hi r.hi = r.hi := by
-      rw [max_eq_right]; rw [← hStopEq]; exact le_of_lt hExtend
-    have h_merged := merge_step_sets prev (mkNR r.lo r.hi h_r_valid) horder htouch
-    simp only [mkNR, IntRange.toSet] at h_merged
-    simp only [extended, mkNR, extendedHi, IntRange.toSet]
-    rw [h_max_rhi_eq_rhi] at h_merged
-    rw [h_max_stop_eq_rhi]
-    exact h_merged.symm
-
-  -- Step 3: Apply deleteExtraNRs_loop_sets
-  let start' := prev.val.lo
-  have h_extended_lo : extended.val.lo = start' := by simp only [extended, mkNR, start']
-
-  have h_after_ge_start' : ∀ nr ∈ after, start' ≤ nr.val.lo := by
-    intro nr hmem
-    -- From Pairwise on s.ranges and prev being last of before
-    have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
-      rw [← h_s_ranges_decomp]; exact s.ok
-    have h_prev_before_nr : NR.before prev nr :=
-      NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
-    show start' ≤ nr.val.lo
-    have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
-      NR.before_lo_lt h_prev_before_nr
-    have h_start_lt : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
-    exact h_start_lt.le
-
-  have h_loop_sets := deleteExtraNRs_loop_sets start' after extended h_extended_lo h_after_ge_start'
-
-  -- Step 4: Assemble the result
-  calc algoCListSet newRanges
-    _ = algoCListSet (init ++ res.fst :: res.snd) := rfl
-    _ = algoCListSet init ∪ algoCListSet (res.fst :: res.snd) := algoCListSet_append init (res.fst :: res.snd)
-    _ = algoCListSet init ∪ (extended.val.toSet ∪ algoCListSet after) := by rw [h_loop_sets]
-    _ = algoCListSet init ∪ ((prev.val.toSet ∪ r.toSet) ∪ algoCListSet after) := by rw [h_extended_toSet]
-    _ = (algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after) ∪ r.toSet := by ac_rfl
-    _ = s.toSet ∪ r.toSet := by rw [h_s_toSet]
+  simp only [fromNRs, RangeSetBlaze.toSet]
+  change algoCListSet _ = s.toSet ∪ r.toSet
+  simpa [h_interval] using hspec.2
 
 -- Main correctness theorem for internalAddC
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
