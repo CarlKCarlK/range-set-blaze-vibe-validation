@@ -1056,16 +1056,16 @@ private lemma span_props_from_chain
   let split := List.span p xs
   let before := split.fst
   let after := split.snd
+  have h_span : split = (xs.takeWhile p, xs.dropWhile p) :=
+    List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
 
   constructor
   · -- ∀ nr ∈ before, nr.val.lo < start
     intro nr hmem
-    have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
     show nr.val.lo < start
     have hmem_take : nr ∈ xs.takeWhile p := by
-      have : split = (xs.takeWhile p, xs.dropWhile p) := h_span
-      have : split.fst = xs.takeWhile p := congrArg Prod.fst this
-      rw [← this]
+      have h_fst : split.fst = xs.takeWhile p := congrArg Prod.fst h_span
+      rw [← h_fst]
       exact hmem
     have := List.mem_takeWhile_imp hmem_take
     simp [p] at this
@@ -1074,23 +1074,10 @@ private lemma span_props_from_chain
   constructor
   · -- ∀ nr ∈ after, start ≤ nr.val.lo
     intro nr hmem
-    have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
     show start ≤ nr.val.lo
-    have hmem_drop : nr ∈ xs.dropWhile p := by
-      have : split = (xs.takeWhile p, xs.dropWhile p) := h_span
-      have : split.snd = xs.dropWhile p := congrArg Prod.snd this
-      rw [← this]
-      exact hmem
-    -- Use the span suffix property to establish the lower-endpoint bound.
-    have hmem_span_snd : nr ∈ (List.span (fun nr => decide (nr.val.lo < start)) xs).snd := by
-      have h_eq : (List.span (fun nr => decide (nr.val.lo < start)) xs).snd = xs.dropWhile (fun nr => decide (nr.val.lo < start)) := by
-        exact congrArg Prod.snd (List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs))
-      rw [h_eq]
-      exact hmem_drop
-    exact span_suffix_all_ge_start_of_chain xs start hchain nr hmem_span_snd
+    exact span_suffix_all_ge_start_of_chain xs start hchain nr hmem
 
   · -- List.IsChain loLE (before ++ after)
-    have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
     show List.IsChain loLE (split.fst ++ split.snd)
     have : split = (xs.takeWhile p, xs.dropWhile p) := h_span
     rw [congrArg Prod.fst this, congrArg Prod.snd this]
