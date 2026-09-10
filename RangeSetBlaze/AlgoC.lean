@@ -862,25 +862,26 @@ private def internalAddC_extendPrev_safe
   let newRanges := init ++ res.fst :: res.snd
   -- Prove Pairwise on newRanges
   have hpw_newRanges : List.Pairwise NR.before newRanges := by
+    let p := fun nr : NR => decide (nr.val.lo ≤ start)
+    have h_s_decomp : s.ranges = before ++ after := by
+      have h_span : List.span p s.ranges = (before, after) := by
+        simpa [p] using hDecomp
+      rw [List.span_eq_takeWhile_dropWhile] at h_span
+      calc s.ranges
+        _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p :=
+          (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
+        _ = before ++ after := by
+          have h1 : s.ranges.takeWhile p = before := by
+            simpa using congrArg Prod.fst h_span
+          have h2 : s.ranges.dropWhile p = after := by
+            simpa using congrArg Prod.snd h_span
+          rw [h1, h2]
+    have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
+      rw [← h_s_decomp]
+      exact s.ok
+
     -- Extract Pairwise for before from s.ok using span decomposition
     have hpw_before : List.Pairwise NR.before before := by
-      let p := fun nr : NR => decide (nr.val.lo ≤ start)
-      have h_s_decomp : s.ranges = before ++ after := by
-        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-        calc s.ranges
-          _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
-          _ = before ++ after := by
-            have h1 : before = s.ranges.takeWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.1.symm
-            have h2 : after = s.ranges.dropWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.2.symm
-            rw [h1, h2]
-      have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
-        rw [← h_s_decomp]; exact s.ok
       exact (List.pairwise_append.mp h_ok_decomp).1
 
     -- Extract Pairwise for init using dropLast
@@ -893,32 +894,7 @@ private def internalAddC_extendPrev_safe
 
     -- Extract Pairwise for after from s.ok
     have hpw_after : List.Pairwise NR.before after := by
-      let p := fun nr : NR => decide (nr.val.lo ≤ start)
-      have h_s_decomp : s.ranges = before ++ after := by
-        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-        calc s.ranges
-          _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
-          _ = before ++ after := by
-            have h1 : before = s.ranges.takeWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.1.symm
-            have h2 : after = s.ranges.dropWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.2.symm
-            rw [h1, h2]
-      have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
-        rw [← h_s_decomp]; exact s.ok
-      -- Extract Pairwise on after by induction on before
-      clear p hDecomp hLast _hNoGap _hExtend extendedHi extended res newRanges s _r start stop hExtendedValid h_s_decomp hne init hpw_before hpw_init prev  -- Clear to avoid capturing in induction hypothesis
-      revert h_ok_decomp
-      induction before with
-      | nil => intro h_ok_decomp; exact h_ok_decomp
-      | cons x xs ih =>
-          intro h_ok_decomp
-          cases h_ok_decomp with
-          | cons _ hrest => exact ih hrest
+      exact (List.pairwise_append.mp h_ok_decomp).2.1
 
     -- Use start' := prev.val.lo as our reference point
     let start' := prev.val.lo
@@ -928,12 +904,11 @@ private def internalAddC_extendPrev_safe
       have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
       have h_prev_in_before : prev ∈ before := by
         rw [← heq]; exact List.getLast_mem hne'
-      let p := fun nr : NR => decide (nr.val.lo ≤ start)
       have h_before_eq : before = s.ranges.takeWhile p := by
-        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-        rw [this] at hDecomp
-        simp only [Prod.mk.injEq] at hDecomp
-        exact hDecomp.1.symm
+        have h_span : List.span p s.ranges = (before, after) := by
+          simpa [p] using hDecomp
+        rw [List.span_eq_takeWhile_dropWhile] at h_span
+        exact (congrArg Prod.fst h_span).symm
       rw [h_before_eq] at h_prev_in_before
       have := List.mem_takeWhile_imp h_prev_in_before
       simp only [p, decide_eq_true_eq] at this
@@ -948,25 +923,6 @@ private def internalAddC_extendPrev_safe
     -- all elements in after come after prev in the Pairwise ordering
     have h_after_ge_start' : ∀ nr ∈ after, start' ≤ nr.val.lo := by
       intro nr hmem
-      -- Get the decomposition of s.ranges
-      let p := fun nr : NR => decide (nr.val.lo ≤ start)
-      have h_s_decomp : s.ranges = before ++ after := by
-        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
-        calc s.ranges
-          _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
-          _ = before ++ after := by
-            have h1 : before = s.ranges.takeWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.1.symm
-            have h2 : after = s.ranges.dropWhile p := by
-              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
-              simp only [Prod.mk.injEq] at hDecomp
-              exact hDecomp.2.symm
-            rw [h1, h2]
-      -- From s.ok, we have Pairwise on before ++ after
-      have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
-        rw [← h_s_decomp]; exact s.ok
       -- From Pairwise on before ++ after, we get that prev ≺ nr for all nr ∈ after
       have h_prev_before_nr : NR.before prev nr :=
         NR.getLast?_before_suffix h_ok_decomp hLast nr hmem
