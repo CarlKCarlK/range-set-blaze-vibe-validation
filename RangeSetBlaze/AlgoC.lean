@@ -925,33 +925,17 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
         split
         case isTrue =>
           -- covered case: r.hi ≤ prev.hi, return s unchanged
-          -- Need to show s.toSet ∪ r.toSet = s.toSet, i.e., r.toSet ⊆ s.toSet
           rename_i prev h_last h_no_gap h_covered
-          have h_r_covered : r.toSet ⊆ s.toSet := by
-            -- prev is from getLast? of span (≤ r.lo), so prev.lo ≤ r.lo
-            have h_prev_props :=
-              start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
-            have h_prev_lo_le : prev.val.lo ≤ r.lo := h_prev_props.1
-            -- r.hi ≤ prev.hi from h_covered
-            have h_r_hi_le : r.hi ≤ prev.val.hi := h_covered
-            -- Show r.toSet ⊆ prev.toSet ⊆ s.toSet
-            have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
-              intro x hx
-              simp [IntRange.toSet] at hx ⊢
-              exact ⟨le_trans h_prev_lo_le hx.1, le_trans hx.2 h_r_hi_le⟩
-            have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
-              -- s.toSet = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by definition
-              -- algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by algoCListSet_eq_foldr
-              -- So algoCListSet s.ranges = s.toSet definitionally
-              have h_algoC_eq_toSet : algoCListSet s.ranges = s.toSet := by
-                unfold RangeSetBlaze.toSet
-                rw [algoCListSet_eq_foldr]
-              have h_subset_algoC :=
-                nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_props.2
-              rw [h_algoC_eq_toSet] at h_subset_algoC
-              exact h_subset_algoC
-            exact Set.Subset.trans h_r_subset_prev h_prev_in_s
-          -- Goal reduces to s.toSet = s.toSet ∪ r.toSet after unfolding
+          have h_prev_props :=
+            start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
+          have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
+            intro x hx
+            simp [IntRange.toSet] at hx ⊢
+            exact ⟨h_prev_props.1.trans hx.1, hx.2.trans h_covered⟩
+          have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
+            simpa [RangeSetBlaze.toSet, algoCListSet_eq_foldr] using
+              nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_props.2
+          have h_r_covered := Set.Subset.trans h_r_subset_prev h_prev_in_s
           show s.toSet = s.toSet ∪ r.toSet
           rw [Set.union_eq_self_of_subset_right h_r_covered]
         case isFalse =>
