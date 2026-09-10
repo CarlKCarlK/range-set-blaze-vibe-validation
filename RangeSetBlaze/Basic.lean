@@ -146,16 +146,18 @@ def before (a b : NR) : Prop := a.val.hi + 1 < b.val.lo
 
 scoped infixl:50 " ≺ " => NR.before
 
-/-- If `a` comes before `b`, then `a` starts strictly before `b` starts. -/
+/-- If `a ≺ b`, then `a` starts strictly before `b`: `a.lo < b.lo`. -/
 lemma before_lo_lt {a b : NR} (h : a ≺ b) :
     a.val.lo < b.val.lo := by
   exact lt_of_le_of_lt a.property (lt_trans (lt_add_one _) h)
 
-/-- In a pairwise-ordered append, the last element of the prefix comes before every element of the suffix. -/
-lemma getLast?_before_suffix {before after : List NR} {prev : NR}
-    (hpair : List.Pairwise NR.before (before ++ after))
-    (hlast : before.getLast? = some prev) :
-    ∀ nr ∈ after, prev ≺ nr := by
+/-- In a pairwise-`before` decomposition `prefix ++ suffix`, the last range of
+the prefix is before every range in the suffix. -/
+lemma pairwise_before_prefix_last_suffix
+    {prefixRanges suffixRanges : List NR} {prev : NR}
+    (hpair : List.Pairwise NR.before (prefixRanges ++ suffixRanges))
+    (hlast : prefixRanges.getLast? = some prev) :
+    ∀ nr ∈ suffixRanges, prev ≺ nr := by
   intro nr hnr
   exact (List.pairwise_append.mp hpair).2.2 prev
     (List.mem_of_mem_getLast? (by simp [hlast])) nr hnr
@@ -202,7 +204,7 @@ lemma glue_sets (a b : NR)
           simpa [before] using this))
   simpa [glue] using this
 
-/-- Compare ranges by their starting point (occasionally handy). -/
+/-- Lower-endpoint preorder: `a` starts no later than `b` (`a.lo ≤ b.lo`). -/
 def startsBefore (a b : NR) : Prop := a.val.lo ≤ b.val.lo
 
 instance : DecidableRel startsBefore :=

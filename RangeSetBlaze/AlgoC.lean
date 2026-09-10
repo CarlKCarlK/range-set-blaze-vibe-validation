@@ -175,8 +175,7 @@ end LocalDefs
 @[reducible] private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
 
-/-- If ranges satisfy `Pairwise before`, they also satisfy `IsChain loLE`.
-The `before` relation (no gap/overlap) implies `lo` ordering. -/
+/-- Pairwise gap-separated ranges form a chain in nondecreasing lower-endpoint order. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
     (h : List.Pairwise NR.before xs) :
     List.IsChain loLE xs := by
@@ -197,6 +196,7 @@ private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : N
       | inr htail =>
           exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_algoCListSet xs nr htail) _
 
+/-- For ranges ordered by lower endpoint, every range in the suffix obtained by spanning while `lo < start` starts at or after `start`. -/
 private lemma span_suffix_all_ge_start_of_chain
     (xs : List NR) (start : Int)
     (hchain : List.IsChain loLE xs) :
@@ -914,7 +914,7 @@ private def internalAddC_extendPrev_safe
       intro nr hmem
       -- From Pairwise on before ++ after, we get that prev ≺ nr for all nr ∈ after
       have h_prev_before_nr : NR.before prev nr :=
-        NR.getLast?_before_suffix h_ok_decomp hLast nr hmem
+        NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
       have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
         NR.before_lo_lt h_prev_before_nr
       have : start' < nr.val.lo := by simpa [start'] using h_prev_lo_lt
@@ -1037,8 +1037,7 @@ private lemma span_split_on_splice
   rw [List.span_eq_takeWhile_dropWhile]
   rw [htake, hdrop]
 
-/-- From `IsChain loLE` on `xs`, extract the properties we need about the span decomposition.
-This eliminates lets from dependent types by exporting the properties as plain hypotheses. -/
+/-- For a lower-endpoint-ordered list, the start split has a `< start` prefix, a `≥ start` suffix, and preserves the chain order across their concatenation. -/
 private lemma span_props_from_chain
     (xs : List NR) (start : Int)
     (hchain : List.IsChain loLE xs) :
@@ -1078,7 +1077,7 @@ private lemma span_props_from_chain
       have : split.snd = xs.dropWhile p := congrArg Prod.snd this
       rw [← this]
       exact hmem
-    -- Now use span_suffix_all_ge_start_of_chain, but it expects the original span form
+    -- Use the span suffix property to establish the lower-endpoint bound.
     have hmem_span_snd : nr ∈ (List.span (fun nr => decide (nr.val.lo < start)) xs).snd := by
       have h_eq : (List.span (fun nr => decide (nr.val.lo < start)) xs).snd = xs.dropWhile (fun nr => decide (nr.val.lo < start)) := by
         exact congrArg Prod.snd (List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs))
@@ -1348,7 +1347,7 @@ theorem internalAddC_extendPrev_safe_toSet
     have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
       rw [← h_s_ranges_decomp]; exact s.ok
     have h_prev_before_nr : NR.before prev nr :=
-      NR.getLast?_before_suffix h_ok_decomp hLast nr hmem
+      NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
     show start' ≤ nr.val.lo
     have h_prev_lo_lt : prev.val.lo < nr.val.lo :=
       NR.before_lo_lt h_prev_before_nr
