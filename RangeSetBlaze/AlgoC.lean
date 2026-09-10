@@ -363,14 +363,11 @@ private lemma all_before_strict_before_start
     (hne : before ≠ [])
     (hlast : (before.getLast hne).val.hi + 1 < start) :
     ∀ x ∈ before, x.val.hi + 1 < start := by
-  -- every x ∈ (dropLast before) satisfies x ≺ last(before)
-  have h_all : ∀ x ∈ List.dropLast before, NR.before x (before.getLast hne) := by
-    intro x hx
-    simpa using hpair.rel_dropLast_getLast hx
-  -- now any x ∈ before is either the last or in dropLast
   intro x hx
-  by_cases hdrop : x ∈ List.dropLast before
-  · have hx_before_last := h_all x hdrop
+  by_cases hlastx : x = before.getLast hne
+  · simpa [hlastx] using hlast
+  · have hdrop := List.mem_dropLast_of_mem_of_ne_getLast hx hlastx
+    have hx_before_last := hpair.rel_dropLast_getLast hdrop
     -- x ≺ last ⇒ x.hi + 1 < last.lo, and last.lo ≤ last.hi + 1 < start
     unfold NR.before at hx_before_last
     have last_lo_lt_start : (before.getLast hne).val.lo < start := by
@@ -380,16 +377,6 @@ private lemma all_before_strict_before_start
         _ < (before.getLast hne).val.hi + 1 := by omega
         _ < start := hlast
     exact lt_trans hx_before_last last_lo_lt_start
-  · -- x is not in dropLast, so x must be the last
-    have heq : x = before.getLast hne := by
-      have : before = List.dropLast before ++ [before.getLast hne] := (List.dropLast_append_getLast hne).symm
-      rw [this] at hx
-      simp only [List.mem_append, List.mem_singleton] at hx
-      rcases hx with hx | hx
-      · contradiction
-      · exact hx
-    subst heq
-    exact hlast
 
 /-- Inserting a nonempty interval across a strict start gap preserves both the
 ordered representation and the exact represented union. -/
