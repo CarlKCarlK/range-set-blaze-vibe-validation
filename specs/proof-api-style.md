@@ -11,9 +11,27 @@ Future fresh-chat refactoring sessions begin with `AGENTS.md`, which routes read
 5. Do not encode operations such as `getLast?`, `dropWhile`, decomposition mechanics, or tactic structure unless that operation is genuinely part of the concept.
 6. Prefer names that read naturally at call sites.
 7. While the API is young, rename mediocre names instead of preserving them solely to avoid churn.
-8. Choose vocabulary that can remain meaningful in proofs about cursor-based `BTreeMap` insertion, `RangeMapBlaze`, and other sorted-disjoint-range implementations.
+8. Among otherwise good choices, prefer vocabulary that can remain meaningful in proofs about cursor-based `BTreeMap` insertion, `RangeMapBlaze`, and other sorted-disjoint-range implementations.
 
 Do not trade away idiomatic Lean merely to resemble another language, and do not rename a clear name merely because it is long.
+
+## Future proof targets
+
+When evaluating proof abstractions, keep two likely future proof targets in mind:
+
+- cursor-based `BTreeMap` insertion;
+- `RangeMapBlaze`.
+
+Prefer names and mathematical concepts that could transfer naturally to those settings. However, do not add helpers, structures, theorem fields, or proof API solely for hypothetical future reuse. New proof code should still have clear value in the current `RangeSetBlaze` proof.
+
+Treat possible cursor or `RangeMapBlaze` reuse as a **tie-breaker** when choosing among otherwise good designs, not as sufficient justification for adding unused abstractions.
+
+In particular:
+
+- favor concepts such as predecessor, ordered prefix/suffix, split boundary, untouched suffix, and endpoint ordering when they arise naturally now;
+- avoid baking `List.span`, `getLast?`, `dropWhile`, or other representation details into public or domain names unless they are genuinely the concept;
+- do not introduce cursor-oriented or map-oriented proof objects before current proofs need them;
+- if an abstraction is rejected today but its underlying concept may matter later, record that observation in the experiment report rather than keeping unused code.
 
 ## Documentation
 

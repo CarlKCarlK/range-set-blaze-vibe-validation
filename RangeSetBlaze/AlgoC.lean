@@ -892,13 +892,18 @@ private def internalAddC_extendPrev_safe
     have hpw_before : List.Pairwise NR.before before := by
       exact (List.pairwise_append.mp h_ok_decomp).1
 
-    -- Extract Pairwise for init using dropLast
-    have hpw_init : List.Pairwise NR.before init := by
-      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
+    have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
+    have h_before_decomp : before = init ++ [prev] := by
       have : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
       rw [heq] at this
-      rw [this] at hpw_before
-      exact (List.pairwise_append.mp hpw_before).1
+      exact this
+    have hpw_before_prev : List.Pairwise NR.before (init ++ [prev]) := by
+      rw [← h_before_decomp]
+      exact hpw_before
+
+    -- Extract Pairwise for init using dropLast
+    have hpw_init : List.Pairwise NR.before init := by
+      exact (List.pairwise_append.mp hpw_before_prev).1
 
     -- Extract Pairwise for after from s.ok
     have hpw_after : List.Pairwise NR.before after := by
@@ -940,12 +945,8 @@ private def internalAddC_extendPrev_safe
         | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
         | inr hmem => exact h_loop_props.2 y hmem
       -- From pairwise on before, x ≺ prev
-      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
-      have h_before_decomp : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
-      rw [heq] at h_before_decomp
-      rw [h_before_decomp] at hpw_before
       have h_x_before_prev : NR.before x prev := by
-        have hcross_init_prev := (List.pairwise_append.mp hpw_before).2.2
+        have hcross_init_prev := (List.pairwise_append.mp hpw_before_prev).2.2
         exact hcross_init_prev x hx prev (by simp)
       -- x.val.hi + 1 < prev.val.lo = start'
       have h_x_hi_lt_start' : x.val.hi + 1 < start' := by
