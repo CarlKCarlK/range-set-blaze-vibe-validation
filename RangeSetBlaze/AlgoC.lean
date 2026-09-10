@@ -478,24 +478,24 @@ private lemma all_before_strict_before_start
     subst heq
     exact hlast
 
-/-- Lemma for internalAdd2NRs: inserting [start,stop] into a Pairwise list maintains Pairwise.
-This version requires a gap hypothesis: either before is empty, or the last element of before
-is strictly before start. This matches the actual call sites in internalAddC. -/
-private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
+/-- Inserting a nonempty interval across a strict start gap preserves both the
+ordered representation and the exact represented union. -/
+private lemma internalAdd2NRs_preserves_order_and_union
+    (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
     (hpw : List.Pairwise NR.before xs)
     (hgap : let split := List.span (fun nr => decide (nr.val.lo < start)) xs
             let before := split.fst
             before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start) :
-    let split := List.span (fun nr => decide (nr.val.lo < start)) xs
-    let before := split.fst
-    let after := split.snd
-    let inserted := mkNR start stop h_le
-    let ys := before ++ inserted :: after
-    List.Pairwise NR.before (deleteExtraNRs ys start stop) := by
-  intro split before after inserted ys
-
-  -- Set up the predicate
+    List.Pairwise NR.before (internalAdd2NRs xs start stop h_le) ∧
+      algoCListSet (internalAdd2NRs xs start stop h_le) =
+        algoCListSet xs ∪ (mkNR start stop h_le).val.toSet := by
+  -- Both guarantees use the same strict-start split.
   set p : NR → Bool := (fun nr => decide (nr.val.lo < start)) with hp
+  set split := List.span p xs
+  set before := split.fst
+  set after := split.snd
+  set inserted := mkNR start stop h_le
+  set ys := before ++ inserted :: after
 
   have h_span_eq : split = (xs.takeWhile p, xs.dropWhile p) :=
     List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
@@ -504,19 +504,18 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   have h_after_eq : after = xs.dropWhile p := by
     simpa [after] using congrArg Prod.snd h_span_eq
 
-  -- Properties of before: all elements satisfy p (i.e., nr.lo < start)
+  -- The prefix satisfies the strict split predicate, while the inserted range
+  -- is its first failure.
   have h_before_all : ∀ nr ∈ before, p nr = true := by
     intro nr hmem
     rw [h_before_eq] at hmem
     exact List.mem_takeWhile_imp hmem
 
-  -- inserted doesn't satisfy p (inserted.lo = start, so not < start)
   have h_inserted_false : p inserted = false := by
     simp only [p, decide_eq_false_iff_not, not_lt]
     show start ≤ inserted.val.lo
     simp [inserted, mkNR]
 
-  -- Span of ys gives back (before, inserted :: after)
   have h_span_ys : List.span p ys = (before, inserted :: after) := by
     have htake : ys.takeWhile p = before := by
       rw [List.takeWhile_append_of_pos h_before_all]
@@ -526,21 +525,11 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       simp [h_inserted_false]
     simp [List.span_eq_takeWhile_dropWhile, htake, hdrop]
 
-  -- Now analyze deleteExtraNRs on ys
-  unfold deleteExtraNRs
-
-  -- The span in deleteExtraNRs uses the exact same predicate
   have h_span_match :
     List.span (fun nr => decide (nr.val.lo < start)) ys = (before, inserted :: after) := by
     convert h_span_ys using 1
 
-  -- Simplify using the span result
-  simp only [h_span_match]
-
-  -- Now we have: before ++ (deleteExtraNRs_loop initial after).fst :: (deleteExtraNRs_loop initial after).snd
-  -- where initial = mkNR inserted.lo (max inserted.hi stop) = mkNR start (max stop stop) = mkNR start stop
-
-  -- Set up for applying ok_deleteExtraNRs_loop
+  -- Expose the one loop result consumed by both semantic guarantees.
   set curr := inserted
   set initialHi := max curr.val.hi stop
   have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
@@ -548,15 +537,18 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   set initial := mkNR curr.val.lo initialHi (le_trans hcurr hmax_prop)
   set result := deleteExtraNRs_loop initial after
 
-  -- Need to prove: before ++ (result.fst :: result.snd) is Pairwise
+  have h_output :
+      internalAdd2NRs xs start stop h_le = before ++ result.fst :: result.snd := by
+    unfold internalAdd2NRs deleteExtraNRs
+    change deleteExtraNRs ys start stop = _
+    unfold deleteExtraNRs
+    rw [h_span_match]
 
-  -- Step 1: Get Pairwise on before (from xs)
   have hpw_before : List.Pairwise NR.before before := by
     exact List.Pairwise.sublist
       (by rw [h_before_eq]
           exact (List.takeWhile_sublist p : (xs.takeWhile p).Sublist xs)) hpw
 
-  -- Step 2: Extract Pairwise on after
   have hpw_after : List.Pairwise NR.before after := by
     exact List.Pairwise.sublist
       (by rw [h_after_eq]
@@ -571,42 +563,54 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
     simp [initial, curr, inserted, mkNR]
   have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
 
-  -- Step 3: Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (result.fst :: result.snd)
-  -- The weak version only requires Pairwise on `after`, not on (initial :: after)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
-    -- Apply the weak loop lemma - doesn't require Pairwise (initial :: after)
     exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
 
-  -- Step 4: Prove cross product: all elements of before are ≺ all elements of result
+  -- A strict gap before `start`, combined with the loop's preserved lower
+  -- bound, establishes every prefix-to-result ordering edge.
   have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
     intro x hx y hy
     unfold NR.before
-    -- y ∈ (result.fst :: result.snd) means y.lo ≥ start (from loop preservation)
     have hy_ge : start ≤ y.val.lo := by
       simp [result] at hy
       rcases hy with rfl | hy_tail
       · rw [h_loop_props.1]
       · exact h_loop_props.2 y hy_tail
 
-    -- Need: x.hi + 1 < y.lo
-    -- Strategy: use the gap hypothesis to show all x ∈ before have x.hi + 1 < start,
-    -- and all y in result have y.lo ≥ start (from deleteExtraNRs_loop_lo_ge)
     have hgap_before : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := hgap
     rcases hgap_before with hempty | ⟨hne, hlast_gap⟩
-    · -- before is empty, so x ∈ before is vacuous
+    ·
       rw [hempty] at hx
       cases hx
-    · -- Nonempty before with gap: last(before).hi + 1 < start
-      -- From the last-gap, push gap to all elements of before
+    ·
       have hall_before : ∀ x ∈ before, x.val.hi + 1 < start :=
         all_before_strict_before_start before start hpw_before hne hlast_gap
-
-      -- Get: x.hi + 1 < start
       have hx_lt : x.val.hi + 1 < start := hall_before x hx
+      exact lt_of_lt_of_le hx_lt hy_ge
 
-      -- Conclude: x.hi + 1 < start ≤ y.lo, so x.hi + 1 < y.lo
-      exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
-  exact List.pairwise_append.mpr ⟨hpw_before, hpw_result, hcross⟩
+  have horder : List.Pairwise NR.before (internalAdd2NRs xs start stop h_le) := by
+    rw [h_output]
+    exact List.pairwise_append.mpr ⟨hpw_before, hpw_result, hcross⟩
+
+  have h_xs_eq : xs = before ++ after := by
+    rw [h_before_eq, h_after_eq]
+    exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
+
+  have h_initial_set : initial.val.toSet = inserted.val.toSet := by
+    have h_initial_hi : initialHi = stop := by
+      simp [initialHi, curr, inserted, mkNR]
+    simp [initial, curr, inserted, mkNR, IntRange.toSet, h_initial_hi]
+
+  have hsets :
+      algoCListSet (internalAdd2NRs xs start stop h_le) =
+        algoCListSet xs ∪ inserted.val.toSet := by
+    rw [h_output, algoCListSet_append]
+    rw [deleteExtraNRs_loop_sets start after initial h_initial_lo h_after_ge]
+    rw [h_initial_set]
+    rw [h_xs_eq, algoCListSet_append]
+    ac_rfl
+
+  exact ⟨horder, by simpa [inserted] using hsets⟩
 
 /-- In an ordered range list, a strict gap after the non-strict start prefix
 makes that whole prefix strict, so the two start prefixes have the same gap. -/
@@ -697,7 +701,8 @@ def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
     let xs := s.ranges
     have hok : List.Pairwise NR.before
         (internalAdd2NRs xs r.lo r.hi hle) :=
-      ok_internalAdd2NRs xs r.lo r.hi hle s.ok hgap_lt
+      (internalAdd2NRs_preserves_order_and_union
+        xs r.lo r.hi hle s.ok hgap_lt).1
     fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
 
 /-- Wrapper for internalAdd2_safe that accepts a gap hypothesis with (≤ start) predicate
@@ -924,184 +929,6 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
             have hExtend : prev.val.hi < stop := not_le.mp _hextend
             internalAddC_extendPrev_safe s r start stop before after prev hDecomp h_last hNoGap hExtend
 
-/-- If all `before` satisfy `lo < start`, `inserted.lo = start`, and all `after` satisfy `start ≤ lo`,
-then `List.span (·.val.lo < start)` on `before ++ inserted :: after` yields `(before, inserted :: after)`. -/
-private lemma span_split_on_splice
-    (start : Int)
-    (before after : List NR)
-    (inserted : NR)
-    (h_before_all : ∀ nr ∈ before, nr.val.lo < start)
-    (h_inserted_lo : inserted.val.lo = start)
-    (_h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo) :
-    List.span (fun nr => decide (nr.val.lo < start)) (before ++ inserted :: after)
-      = (before, inserted :: after) := by
-  let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-  -- Prove via takeWhile/dropWhile
-  have h_before_p : ∀ nr ∈ before, p nr = true := by
-    intro nr hmem
-    simp [p]
-    exact h_before_all nr hmem
-  have h_inserted_p : p inserted = false := by
-    simp [p, h_inserted_lo]
-  have htake : (before ++ inserted :: after).takeWhile p = before :=
-    by
-      rw [List.takeWhile_append_of_pos h_before_p]
-      simp [h_inserted_p]
-  have hdrop : (before ++ inserted :: after).dropWhile p = inserted :: after :=
-    by
-      rw [List.dropWhile_append_of_pos h_before_p]
-      simp [h_inserted_p]
-  rw [List.span_eq_takeWhile_dropWhile]
-  rw [htake, hdrop]
-
-/-- For a lower-endpoint-ordered list, the start split has a `< start` prefix, a `≥ start` suffix, and preserves the chain order across their concatenation. -/
-private lemma span_props_from_chain
-    (xs : List NR) (start : Int)
-    (hchain : List.IsChain loLE xs) :
-    let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-    let split := List.span p xs
-    let before := split.fst
-    let after := split.snd
-    ( (∀ nr ∈ before, nr.val.lo < start)
-    ∧ (∀ nr ∈ after, start ≤ nr.val.lo)
-    ∧ List.IsChain loLE (before ++ after) ) := by
-  let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-  let split := List.span p xs
-  let before := split.fst
-  let after := split.snd
-  have h_span : split = (xs.takeWhile p, xs.dropWhile p) :=
-    List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-
-  constructor
-  · -- ∀ nr ∈ before, nr.val.lo < start
-    intro nr hmem
-    show nr.val.lo < start
-    have hmem_take : nr ∈ xs.takeWhile p := by
-      have h_fst : split.fst = xs.takeWhile p := congrArg Prod.fst h_span
-      rw [← h_fst]
-      exact hmem
-    have := List.mem_takeWhile_imp hmem_take
-    simp [p] at this
-    exact this
-
-  constructor
-  · -- ∀ nr ∈ after, start ≤ nr.val.lo
-    intro nr hmem
-    show start ≤ nr.val.lo
-    exact span_suffix_all_ge_start_of_chain xs start hchain nr hmem
-
-  · -- List.IsChain loLE (before ++ after)
-    show List.IsChain loLE (split.fst ++ split.snd)
-    have : split = (xs.takeWhile p, xs.dropWhile p) := h_span
-    rw [congrArg Prod.fst this, congrArg Prod.snd this]
-    have : xs.takeWhile p ++ xs.dropWhile p = xs := by
-      exact List.takeWhile_append_dropWhile (p := p) (l := xs)
-    rw [this]
-    exact hchain
-
-/-- Explicit version: given plain `before`, `after`, `inserted` and the needed properties,
-`deleteExtraNRs` over `before ++ inserted :: after` yields the expected set union.
-This version has no let-bindings in the type signature, eliminating dependent type issues. -/
-private lemma deleteExtraNRs_sets_after_splice_explicit
-    (start stop : Int) (_h : start ≤ stop)
-    (before after : List NR) (inserted : NR)
-    (h_before_all : ∀ nr ∈ before, nr.val.lo < start)
-    (h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo)
-    (h_inserted_lo : inserted.val.lo = start)
-    (h_inserted_hi : inserted.val.hi = stop)
-    (_hchain_before_after : List.IsChain loLE (before ++ after)) :
-    algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop)
-      = algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := by
-  classical
-  let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-
-  -- Use span_split_on_splice to show the span decomposes correctly
-  have h_span_splice : List.span p (before ++ inserted :: after) = (before, inserted :: after) := by
-    exact span_split_on_splice start before after inserted h_before_all h_inserted_lo h_after_ge
-
-  -- inserted breaks the predicate
-  have h_inserted_false : p inserted = false := by
-    simp [p, h_inserted_lo]
-
-  -- Unfold deleteExtraNRs and rewrite the span
-  unfold deleteExtraNRs
-  rw [h_span_splice]
-  simp only []
-
-  -- Set up the initial value in the cons branch
-  set initialHi := max inserted.val.hi stop
-  have h_inserted_le : inserted.val.lo ≤ inserted.val.hi := inserted.property
-  have h_max_ge : inserted.val.hi ≤ initialHi := le_max_left _ _
-  have h_initial_valid : inserted.val.lo ≤ initialHi := le_trans h_inserted_le h_max_ge
-  set initial := mkNR inserted.val.lo initialHi h_initial_valid
-  set res := deleteExtraNRs_loop initial after
-
-  -- The result is: before ++ res.fst :: res.snd
-  have h_result : algoCListSet (before ++ res.fst :: res.snd) =
-                  algoCListSet before ∪ algoCListSet (res.fst :: res.snd) := listSet_append _ _
-  rw [h_result]
-
-  -- Apply the loop lemma
-  have h_initial_lo : initial.val.lo = start := by
-    simp [initial, mkNR, h_inserted_lo]
-  have h_loop := deleteExtraNRs_loop_sets start after initial h_initial_lo h_after_ge
-  rw [h_loop]
-
-  -- Now we have: algoCListSet before ∪ (initial.toSet ∪ algoCListSet after)
-  -- Need to show this equals: algoCListSet before ∪ inserted.toSet ∪ algoCListSet after
-  -- Prove initial.toSet = inserted.toSet
-  have h_initial_eq : initial.val.toSet = inserted.val.toSet := by
-    have h_init_hi : initialHi = max stop stop := by
-      simp [initialHi, h_inserted_hi]
-    have : initialHi = stop := by simp [h_init_hi]
-    simp [initial, mkNR, IntRange.toSet, this, h_inserted_lo, h_inserted_hi]
-
-  rw [h_initial_eq, Set.union_assoc]
-
-/-- Core list lemma: inserting [start,stop] via `internalAdd2NRs` preserves sets. -/
-private lemma internalAdd2NRs_sets
-    (xs : List NR) (start stop : Int) (h : start ≤ stop)
-    (hchain : List.IsChain loLE xs) :
-  algoCListSet (internalAdd2NRs xs start stop h)
-    = algoCListSet xs ∪ (mkNR start stop h).val.toSet := by
-  -- Unfold to expose deleteExtraNRs
-  unfold internalAdd2NRs
-
-  -- Get the span decomposition and its properties using our new helper
-  let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-  let split := List.span p xs
-  let before := split.fst
-  let after := split.snd
-
-  -- Extract properties from the chain
-  have ⟨h_before_all, h_after_ge, h_chain_concat⟩ := span_props_from_chain xs start hchain
-
-  -- Set up inserted
-  set inserted := mkNR start stop h
-  have h_inserted_lo : inserted.val.lo = start := by simp [inserted, mkNR]
-  have h_inserted_hi : inserted.val.hi = stop := by simp [inserted, mkNR]
-
-  -- Apply the explicit splice lemma
-  have h_splice := deleteExtraNRs_sets_after_splice_explicit start stop h before after inserted
-    h_before_all h_after_ge h_inserted_lo h_inserted_hi h_chain_concat
-
-  -- Now prove xs = before ++ after to rewrite algoCListSet xs
-  have h_xs_eq : xs = before ++ after := by
-    have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-    have h_fst : before = xs.takeWhile p := congrArg Prod.fst h_span
-    have h_snd : after = xs.dropWhile p := congrArg Prod.snd h_span
-    rw [h_fst, h_snd]
-    exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
-
-  -- The LHS unfolds to deleteExtraNRs applied to the spliced list
-  -- We need to show this equals the RHS
-  calc algoCListSet (internalAdd2NRs xs start stop h)
-    _ = algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop) := by rfl
-    _ = algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := h_splice
-    _ = algoCListSet before ∪ algoCListSet after ∪ inserted.val.toSet := by ac_rfl
-    _ = algoCListSet (before ++ after) ∪ inserted.val.toSet := by rw [← algoCListSet_append]
-    _ = algoCListSet xs ∪ inserted.val.toSet := by rw [← h_xs_eq]
-
 -- Bridge lemma: algoCListSet here matches the foldr pattern used in Basic.lean's listToSet
 private lemma algoCListSet_eq_foldr (rs : List NR) :
     algoCListSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
@@ -1120,11 +947,8 @@ theorem internalAdd2_safe_toSet
     simp [internalAdd2_safe, hempty, h_empty_set, Set.union_comm]
   · -- non-empty range
     have hle : r.lo ≤ r.hi := not_lt.mp hempty
-    have hchain : List.IsChain loLE s.ranges :=
-      pairwise_before_implies_chain_loLE s.ranges s.ok
-    -- use the list lemma
-    have hsets := internalAdd2NRs_sets s.ranges r.lo r.hi hle hchain
-    -- The result is fromNRs with ok_internalAdd2NRs
+    have hsets := (internalAdd2NRs_preserves_order_and_union
+      s.ranges r.lo r.hi hle s.ok hgap_lt).2
     simp only [internalAdd2_safe, hempty, dite_false]
     -- fromNRs just wraps the list, so toSet unfolds to foldr
     unfold fromNRs RangeSetBlaze.toSet
