@@ -9,11 +9,39 @@ open IntRange.NR
 open scoped IntRange.NR
 
 /-!
-Algo C mirrors the production insertion algorithm over `NR` and `RangeSetBlaze`.
-It splits ranges on the lower endpoint and handles gap, covered, and
-extend-and-merge branches. Proof helpers establish `Pairwise NR.before` and
-exact set-union correctness. The executable branch structure is protected
-during proof refactoring.
+Algo C is the list model of the production `RangeSetBlaze` insertion algorithm.
+Its executable path deliberately retains the production branches: reject an
+empty input, locate the last range whose lower endpoint is at most the input
+start, insert after a true gap, return an already-covered input unchanged, or
+extend the predecessor and merge forward.
+
+The proof follows the same operation boundaries:
+
+* `deleteExtraNRs_loop` scans the suffix until the first true gap. Its unified
+  contract proves ordered output, preservation of the scan's lower bound, and
+  exact union preservation in one induction.
+* `internalAdd2NRs` inserts at a strict-start split and invokes that merge
+  logic. Its contract proves both `List.Pairwise NR.before` and set-union
+  correctness.
+* `internalAddC_extendPrev_safe` replaces a touching predecessor by its
+  extension, merges forward, and obtains both guarantees from the
+  extend-predecessor contract.
+* `internalAddC_toSet` mirrors the executable branches and normally dispatches
+  to those contracts; only the covered branch needs a local subset argument.
+
+The two start predicates express different boundaries. `internalAddC` uses
+`nr.lo ≤ start` so a stored range beginning exactly at `start` is a predecessor
+candidate. The insertion helper uses `nr.lo < start` because the newly inserted
+range begins at `start` and must not enter the untouched prefix. These
+predicates are not equivalent. In the separated-predecessor branch,
+`nonstrict_start_gap_implies_strict_start_gap` bridges them: nonempty ranges and
+pairwise `NR.before` ordering imply that a non-strict prefix ending before a
+strict gap consists entirely of ranges starting strictly below `start`.
+
+The list split, `getLast?`, and `dropLast` operations model `BTreeMap` range and
+predecessor operations; they are representation choices, not a different
+insertion algorithm. The executable branch structure and the final theorem
+`(internalAddC s r).toSet = s.toSet ∪ r.toSet` are protected.
 -/
 
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
@@ -24,7 +52,8 @@ private def fromNRs (xs : List NR)
   (hok : List.Pairwise NR.before xs) : RangeSetBlaze :=
   { ranges := xs, ok := hok }
 
--- NEW: top-level version of the previous nested `loop`
+/-- Scan forward from `current`, merging touching or overlapping pending ranges
+and stopping at the first range separated by a true gap. -/
 private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (List NR) :=
   match pending with
   | [] => (current, [])
@@ -119,6 +148,9 @@ private lemma merge_step_sets
       next.val.lo next.val.hi h₁ h₂ horder htouch
   simpa [IntRange.toSet, mkNR] using h_union
 
+/-- Locate the first range not strictly before `start`, extend its upper
+endpoint through `stop`, and merge any following ranges that no longer have a
+gap. -/
 private def deleteExtraNRs (xs : List NR) (start stop : Int) :
     List NR :=
   let split := List.span (fun nr => decide (nr.val.lo < start)) xs
@@ -135,6 +167,8 @@ private def deleteExtraNRs (xs : List NR) (start stop : Int) :
       let result := deleteExtraNRs_loop initial tail
       before ++ (result.fst :: result.snd)
 
+/-- Insert a nonempty interval at the strict-start boundary, then merge away
+the touching or overlapping suffix. -/
 private def internalAdd2NRs (xs : List NR) (start stop : Int)
     (h : start ≤ stop) :
     List NR :=
@@ -144,14 +178,12 @@ private def internalAdd2NRs (xs : List NR) (start stop : Int)
   let inserted := mkNR start stop h
   deleteExtraNRs (before ++ (inserted :: after)) start stop
 
--- delete_extra deleted - use internalAdd2_safe instead
--- internalAdd2 deleted - use internalAdd2_safe or internalAdd2_safe_from_le instead
-
 open Classical
 open IntRange
 
 
--- Local helper: list-based set view (same as listToSet from Basic.lean but scoped to this file)
+-- Algo C-local list set view. Its duplication of the folds in `Basic` and
+-- Algo B is recorded as maintenance debt in the Phase 3 endpoint report.
 section LocalDefs
 
 private def algoCListSet (rs : List NR) : Set Int :=
@@ -560,7 +592,8 @@ private theorem nonstrict_start_gap_implies_strict_start_gap
     exact heq.symm ▸
       (show hasGap (xs.takeWhile nonstrict) from Or.inr ⟨hne, hlast⟩)
 
--- Helper lemma: getLast? = some implies getLast returns the same value
+/-- A successful optional-last lookup supplies the nonempty witness required by
+`List.getLast` and identifies the resulting element. -/
 theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.getLast? = some x) :
     ∃ hne : xs ≠ [], xs.getLast hne = x := by
   have hne : xs ≠ [] := by
@@ -587,8 +620,8 @@ private lemma start_split_predecessor_le_and_mem
   have h_pred := List.mem_takeWhile_imp h_prev_mem_take
   exact ⟨of_decide_eq_true h_pred, List.takeWhile_subset _ h_prev_mem_take⟩
 
-/-- Safe version of internalAdd2 that uses the gap hypothesis to construct
-a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
+/-- Insert after a strict-start gap and construct the result from the proved
+`Pairwise NR.before` invariant. -/
 def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
     (hgap_lt :
       let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
@@ -773,6 +806,8 @@ private def internalAddC_extendPrev_safe
   have hspec := extend_predecessor_preserves_order_and_union s start stop before after prev
     hDecomp hLast _hNoGap _hExtend
   exact fromNRs newRanges hspec.1
+/-- Production-shaped insertion: handle empty, separated, covered, and
+extend-and-merge cases after locating the non-strict predecessor. -/
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
@@ -895,7 +930,8 @@ theorem internalAddC_extendPrev_safe_toSet
   change algoCListSet _ = s.toSet ∪ r.toSet
   simpa [h_interval] using hspec.2
 
--- Main correctness theorem for internalAddC
+/-- Algo C represents exactly the union of the old range set and the input
+interval. The proof follows the same branch structure as `internalAddC`. -/
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
   unfold internalAddC

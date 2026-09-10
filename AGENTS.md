@@ -4,6 +4,10 @@ Before substantive proof or refactoring work, read:
 
 - `specs/lean-proof-refactoring.md`
 - `specs/proof-api-style.md`
+- `specs/phase3-proof-architecture-endpoint.md` for the frozen Algo C architecture and Phase 4 boundary
+
+Phase 3 is complete. Treat further Algo C work as stabilization or narrowly
+scoped maintenance, not as a continuing proof-compression campaign.
 
 Preserve Algo C's production-shaped algorithm unless the task explicitly authorizes algorithm changes. Do not silently broaden a scoped refactoring unit, and preserve unrelated user and workspace changes.
 
