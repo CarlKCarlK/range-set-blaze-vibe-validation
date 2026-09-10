@@ -267,6 +267,138 @@ private lemma span_suffix_all_ge_start_of_chain
             hchain_after.rel_cons htail
           exact le_trans h_start_le_y h_y_le_nr
 
+/-- One semantic contract for the scan: it preserves the represented union,
+keeps every output lower endpoint at or after the scan start, and preserves
+ordering whenever the pending input is ordered. -/
+private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
+    (start : Int) (current : NR) (pending : List NR)
+    (hlo : current.val.lo = start)
+    (hge : ∀ nr ∈ pending, start ≤ nr.val.lo) :
+    let res := deleteExtraNRs_loop current pending
+    (List.Pairwise NR.before pending →
+      List.Pairwise NR.before (res.fst :: res.snd)) ∧
+      (∀ nr ∈ (res.fst :: res.snd), start ≤ nr.val.lo) ∧
+      algoCListSet (res.fst :: res.snd) =
+        current.val.toSet ∪ algoCListSet pending := by
+  induction pending generalizing current with
+  | nil =>
+      simp [deleteExtraNRs_loop, algoCListSet_nil, Set.union_comm, hlo]
+  | cons next tail ih =>
+      dsimp [deleteExtraNRs_loop]
+      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
+      · set merged :=
+          mkNR current.val.lo (max current.val.hi next.val.hi)
+            (by
+              have hc : current.val.lo ≤ current.val.hi := current.property
+              exact le_trans hc (le_max_left _ _)) with hmerged_def
+        have horder : current.val.lo ≤ next.val.lo := by
+          have : start ≤ next.val.lo := hge next (by simp)
+          simpa [hlo] using this
+        have htouch : ¬ (current.val.hi + 1 < next.val.lo) := not_lt.mpr hmerge
+        have hge' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
+          intro nr hmem
+          exact hge nr (by simp [hmem])
+        have hlo' : merged.val.lo = start := by
+          simp [hmerged_def, mkNR, hlo]
+        have hrec := ih merged hlo' hge'
+        have hstep :
+            deleteExtraNRs_loop current (next :: tail) =
+              deleteExtraNRs_loop merged tail := by
+          simpa [hmerged_def] using
+            (deleteExtraNRs_loop_cons_merge current next tail hmerge)
+        have hmerged_toSet :
+            merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
+          simpa [hmerged_def] using
+            (merge_step_sets current next horder htouch).symm
+        have horder_out :
+            List.Pairwise NR.before (next :: tail) →
+            List.Pairwise NR.before
+              ((deleteExtraNRs_loop current (next :: tail)).fst ::
+                (deleteExtraNRs_loop current (next :: tail)).snd) := by
+          intro hpw
+          have hpw_tail : List.Pairwise NR.before tail := by
+            cases hpw with
+            | cons _ htail => exact htail
+          simpa [hstep] using hrec.1 hpw_tail
+        have hbound_out :
+            ∀ nr ∈ ((deleteExtraNRs_loop current (next :: tail)).fst ::
+              (deleteExtraNRs_loop current (next :: tail)).snd),
+              start ≤ nr.val.lo := by
+          simpa [hstep] using hrec.2.1
+        have hsets_out :
+            algoCListSet
+                ((deleteExtraNRs_loop current (next :: tail)).fst ::
+                  (deleteExtraNRs_loop current (next :: tail)).snd) =
+              current.val.toSet ∪ algoCListSet (next :: tail) := by
+          calc
+            algoCListSet
+                ((deleteExtraNRs_loop current (next :: tail)).fst ::
+                  (deleteExtraNRs_loop current (next :: tail)).snd)
+                = merged.val.toSet ∪ algoCListSet tail := by
+                    simpa [hstep] using hrec.2.2
+            _ = (current.val.toSet ∪ next.val.toSet) ∪ algoCListSet tail := by
+                  rw [hmerged_toSet]
+            _ = current.val.toSet ∪ algoCListSet (next :: tail) := by
+                  simp [algoCListSet_cons]; ac_rfl
+        exact ⟨horder_out, hbound_out, hsets_out⟩
+      · have h_loop_eq :
+            deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
+          exact deleteExtraNRs_loop_cons_noMerge current next tail hmerge
+        have horder_out :
+          List.Pairwise NR.before (next :: tail) →
+          List.Pairwise NR.before
+            ((deleteExtraNRs_loop current (next :: tail)).fst ::
+              (deleteExtraNRs_loop current (next :: tail)).snd) := by
+          intro hpwP
+          have h_head : NR.before current next := by
+            unfold NR.before
+            simpa using (not_le.mp hmerge)
+          have hchain : List.IsChain loLE (next :: tail) :=
+            pairwise_before_implies_chain_loLE (next :: tail) (by
+              cases hpwP with
+              | cons hx htail => exact List.Pairwise.cons hx htail)
+          have hnext_le : ∀ z ∈ tail, next.val.lo ≤ z.val.lo :=
+            fun z hz => hchain.rel_cons hz
+          have h_current_tail : ∀ z ∈ tail, NR.before current z := by
+            intro z hz
+            have hnext_gap : current.val.hi + 1 < next.val.lo := by
+              simpa [NR.before] using h_head
+            have hz_gap : current.val.hi + 1 < z.val.lo :=
+              lt_of_lt_of_le hnext_gap (hnext_le z hz)
+            simpa [NR.before] using hz_gap
+          have hpw_tail : List.Pairwise NR.before tail := by
+            cases hpwP with
+            | cons _ htail => exact htail
+          rw [h_loop_eq]
+          constructor
+          · intro b hb
+            simp only [List.mem_cons] at hb
+            rcases hb with rfl | hb
+            · exact h_head
+            · exact h_current_tail b hb
+          · constructor
+            · intro b hb
+              cases hpwP with
+              | cons hx _ => exact hx b hb
+            · exact hpw_tail
+        have hbound_out :
+            ∀ nr ∈ ((deleteExtraNRs_loop current (next :: tail)).fst ::
+              (deleteExtraNRs_loop current (next :: tail)).snd),
+              start ≤ nr.val.lo := by
+          rw [h_loop_eq]
+          intro nr hmem
+          simp only [List.mem_cons] at hmem
+          rcases hmem with rfl | hmem
+          · simp [hlo]
+          · exact hge nr (by simp [hmem])
+        have hsets_out :
+            algoCListSet
+                ((deleteExtraNRs_loop current (next :: tail)).fst ::
+                  (deleteExtraNRs_loop current (next :: tail)).snd) =
+              current.val.toSet ∪ algoCListSet (next :: tail) := by
+          rw [h_loop_eq]
+          simp [Set.union_left_comm]
+        exact ⟨horder_out, hbound_out, hsets_out⟩
 /-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
 lemma deleteExtraNRs_loop_sets
     (start : Int) :
@@ -278,169 +410,10 @@ lemma deleteExtraNRs_loop_sets
             res.fst :: res.snd)
         =
           current.val.toSet ∪ algoCListSet pending := by
-  intro pending current hcurlo hpend
-  induction pending generalizing current with
-  | nil =>
-      simp [algoCListSet_nil, Set.union_comm]
-  | cons next tail ih =>
-      dsimp [deleteExtraNRs_loop]
-      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
-      · -- merge branch
-        have horder : current.val.lo ≤ next.val.lo := by
-          have : start ≤ next.val.lo := hpend next (by simp)
-          simpa [hcurlo] using this
-        have htouch : ¬ (current.val.hi + 1 < next.val.lo) :=
-          not_lt.mpr hmerge
-        have hpend' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
-          intro nr hmem
-          exact hpend nr (by simp [hmem])
-        set merged :=
-          mkNR current.val.lo (max current.val.hi next.val.hi)
-            (by
-              have hc : current.val.lo ≤ current.val.hi := current.property
-              exact le_trans hc (le_max_left _ _)) with hmerged_def
-        have hcurlo' : merged.val.lo = start := by
-          simp [hmerged_def, mkNR, hcurlo]
-        have hrec :=
-          ih merged hcurlo' hpend'
-        have hmerged_toSet :
-            merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
-          simpa [hmerged_def] using
-            (merge_step_sets current next horder htouch).symm
-        have hstep :
-            deleteExtraNRs_loop current (next :: tail)
-              =
-            deleteExtraNRs_loop merged tail := by
-          simpa [hmerged_def] using
-            (deleteExtraNRs_loop_cons_merge current next tail hmerge)
-        have hloop_simplified :
-            algoCListSet
-                ((deleteExtraNRs_loop current (next :: tail)).fst ::
-                  (deleteExtraNRs_loop current (next :: tail)).snd)
-              =
-                merged.val.toSet ∪ algoCListSet tail := by
-          simpa [hstep] using hrec
-        calc
-          algoCListSet
-              (let res := deleteExtraNRs_loop current (next :: tail);
-                res.fst :: res.snd)
-              =
-                merged.val.toSet ∪ algoCListSet tail := hloop_simplified
-          _ = (current.val.toSet ∪ next.val.toSet) ∪ algoCListSet tail := by
-                simp [hmerged_toSet]
-          _ = current.val.toSet ∪ algoCListSet (next :: tail) := by
-                simp [algoCListSet_cons]; ac_rfl
-      · -- no-merge branch
-        have hmerge' : ¬ next.val.lo ≤ current.val.hi + 1 := hmerge
-        have hloop_eq :
-            deleteExtraNRs_loop current (next :: tail)
-              = (current, next :: tail) := by
-          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
-        simp [hmerge, Set.union_left_comm]
+  intro pending current hlo hge
+  exact (deleteExtraNRs_loop_preserves_order_lower_bound_and_union
+    start current pending hlo hge).2.2
 
-/-- Helper: deleteExtraNRs_loop preserves the property that result.fst.lo = start
-and all elements in result.snd have lo ≥ start. -/
-private lemma deleteExtraNRs_loop_lo_ge
-    (start : Int)
-    (current : NR) (pending : List NR)
-    (hlo : current.val.lo = start)
-    (hge : ∀ nr ∈ pending, start ≤ nr.val.lo) :
-    let res := deleteExtraNRs_loop current pending
-    res.fst.val.lo = start ∧ ∀ nr ∈ res.snd, start ≤ nr.val.lo := by
-  induction pending generalizing current with
-  | nil =>
-      simp
-      exact hlo
-  | cons next tail ih =>
-      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
-      · -- Merge case
-        set merged := mkNR current.val.lo (max current.val.hi next.val.hi)
-          (by have := current.property; exact le_trans this (le_max_left _ _))
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
-                          deleteExtraNRs_loop merged tail := by
-          simpa using deleteExtraNRs_loop_cons_merge current next tail hmerge
-        rw [h_loop_eq]
-        apply ih merged
-        · simp [merged, mkNR, hlo]
-        · intro nr hmem
-          exact hge nr (by simp [hmem])
-      · -- No merge case
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
-                          (current, next :: tail) := by
-          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
-        rw [h_loop_eq]
-        simp
-        constructor
-        · exact hlo
-        · constructor
-          · exact hge next (by simp)
-          · intro a ha hmem
-            exact hge ⟨a, nonempty_iff_not_empty a |>.mpr ha⟩ (by simp [hmem])
-
-/-- Weak variant: we only assume `Pairwise pending` and `start ≤ lo` on `pending`.
-It shows the loop output is `Pairwise`, even if `current` may overlap `pending.head`. -/
-private lemma ok_deleteExtraNRs_loop_weak
-    (start : Int)
-    (current : NR) (pending : List NR)
-    (hlo  : current.val.lo = start)
-    (hge  : ∀ nr ∈ pending, start ≤ nr.val.lo)
-    (hpwP : List.Pairwise NR.before pending) :
-    List.Pairwise NR.before
-      (let res := deleteExtraNRs_loop current pending; res.fst :: res.snd) := by
-  induction pending generalizing current with
-  | nil =>
-      simp [deleteExtraNRs_loop]
-  | cons next tail ih =>
-      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
-      · -- MERGE: recurse on (merged, tail)
-        set merged :=
-          mkNR current.val.lo (max current.val.hi next.val.hi)
-            (by have := current.property; exact le_trans this (le_max_left _ _))
-        have hge' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
-          intro nr h; exact hge nr (by simp [h])
-        have hpw_tail : List.Pairwise NR.before tail := by
-          cases hpwP with
-          | cons _ htail => exact htail
-        have hmerged_lo : merged.val.lo = start := by
-          simp [merged, mkNR, hlo]
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) = deleteExtraNRs_loop merged tail := by
-          exact deleteExtraNRs_loop_cons_merge current next tail hmerge
-        simp only [h_loop_eq]
-        exact ih merged hmerged_lo hge' hpw_tail
-      · -- NO MERGE: loop returns (current, next :: tail)
-        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
-          exact deleteExtraNRs_loop_cons_noMerge current next tail hmerge
-        simp only [h_loop_eq]
-        -- we need: current ≺ next and for all z∈tail, current ≺ z
-        have h_head : NR.before current next := by
-          unfold NR.before; simpa using (not_le.mp hmerge)
-        -- For z ∈ tail, use chain order from `Pairwise pending`
-        have hchain : List.IsChain loLE (next :: tail) :=
-          pairwise_before_implies_chain_loLE (next :: tail) (by
-            cases hpwP with
-            | cons hx htail => exact List.Pairwise.cons hx htail)
-        have hnext_le : ∀ z ∈ tail, next.val.lo ≤ z.val.lo :=
-          fun z hz => hchain.rel_cons hz
-        have h_current_tail : ∀ z ∈ tail, NR.before current z := by
-          intro z hz
-          have : current.val.hi + 1 < next.val.lo := by simpa [NR.before] using h_head
-          have : current.val.hi + 1 < z.val.lo := lt_of_lt_of_le this (hnext_le z hz)
-          simpa [NR.before] using this
-        have hpw_tail : List.Pairwise NR.before tail := by
-          cases hpwP with
-          | cons _ htail => exact htail
-        -- Construct Pairwise (current :: next :: tail)
-        constructor
-        · intro b hb
-          simp only [List.mem_cons] at hb
-          rcases hb with rfl | hb
-          · exact h_head
-          · exact h_current_tail b hb
-        · constructor
-          · intro b hb
-            cases hpwP with
-            | cons hx _ => exact hx b hb
-          · exact hpw_tail
 
 /-- If `before` is nonempty and its last element is strictly before `start`,
 then every element of `before` is strictly before `start`. -/
@@ -561,10 +534,12 @@ private lemma internalAdd2NRs_preserves_order_and_union
 
   have h_initial_lo : initial.val.lo = start := by
     simp [initial, curr, inserted, mkNR]
-  have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
+  have h_loop_props :=
+    deleteExtraNRs_loop_preserves_order_lower_bound_and_union
+      start initial after h_initial_lo h_after_ge
 
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
-    exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
+    exact h_loop_props.1 hpw_after
 
   -- A strict gap before `start`, combined with the loop's preserved lower
   -- bound, establishes every prefix-to-result ordering edge.
@@ -572,10 +547,7 @@ private lemma internalAdd2NRs_preserves_order_and_union
     intro x hx y hy
     unfold NR.before
     have hy_ge : start ≤ y.val.lo := by
-      simp [result] at hy
-      rcases hy with rfl | hy_tail
-      · rw [h_loop_props.1]
-      · exact h_loop_props.2 y hy_tail
+      exact h_loop_props.2.1 y (by simpa [result] using hy)
 
     have hgap_before : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := hgap
     rcases hgap_before with hempty | ⟨hne, hlast_gap⟩
@@ -605,7 +577,7 @@ private lemma internalAdd2NRs_preserves_order_and_union
       algoCListSet (internalAdd2NRs xs start stop h_le) =
         algoCListSet xs ∪ inserted.val.toSet := by
     rw [h_output, algoCListSet_append]
-    rw [deleteExtraNRs_loop_sets start after initial h_initial_lo h_after_ge]
+    rw [h_loop_props.2.2]
     rw [h_initial_set]
     rw [h_xs_eq, algoCListSet_append]
     ac_rfl
@@ -790,17 +762,14 @@ private lemma extend_predecessor_preserves_order_and_union
     have h_start_lt : start' < nr.val.lo := by
       simpa [start'] using h_prev_lo_lt
     exact h_start_lt.le
+  have h_loop_props :=
+    deleteExtraNRs_loop_preserves_order_lower_bound_and_union
+      start' extended after h_extended_lo h_after_ge_start'
   have hpw_res : List.Pairwise NR.before (res.fst :: res.snd) :=
-    ok_deleteExtraNRs_loop_weak start' extended after h_extended_lo
-      h_after_ge_start' hpw_after
+    h_loop_props.1 hpw_after
   have h_res_lo_ge : ∀ y ∈ (res.fst :: res.snd), start' ≤ y.val.lo := by
-    have h_loop_props :=
-      deleteExtraNRs_loop_lo_ge start' extended after h_extended_lo h_after_ge_start'
     intro y hy
-    simp only [List.mem_cons] at hy
-    cases hy with
-    | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
-    | inr hmem => exact h_loop_props.2 y hmem
+    exact h_loop_props.2.1 y (by simpa [res] using hy)
   have h_init_before_prev : ∀ x ∈ init, NR.before x prev := by
     intro x hx
     exact (List.pairwise_append.mp hpw_before_prev).2.2 x hx prev (by simp)
@@ -844,7 +813,7 @@ private lemma extend_predecessor_preserves_order_and_union
       _ = algoCListSet init ∪ algoCListSet (res.fst :: res.snd) :=
         algoCListSet_append init (res.fst :: res.snd)
       _ = algoCListSet init ∪ (extended.val.toSet ∪ algoCListSet after) := by
-        rw [deleteExtraNRs_loop_sets start' after extended h_extended_lo h_after_ge_start']
+        rw [h_loop_props.2.2]
       _ = algoCListSet init ∪ ((prev.val.toSet ∪ inserted.val.toSet) ∪ algoCListSet after) := by
         rw [h_extended_toSet]
       _ = (algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after) ∪ inserted.val.toSet := by
