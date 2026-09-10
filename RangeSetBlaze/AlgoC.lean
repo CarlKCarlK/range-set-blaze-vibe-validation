@@ -497,16 +497,17 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   -- Set up the predicate
   set p : NR → Bool := (fun nr => decide (nr.val.lo < start)) with hp
 
+  have h_span_eq : split = (xs.takeWhile p, xs.dropWhile p) :=
+    List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+  have h_before_eq : before = xs.takeWhile p := by
+    simpa [before] using congrArg Prod.fst h_span_eq
+  have h_after_eq : after = xs.dropWhile p := by
+    simpa [after] using congrArg Prod.snd h_span_eq
+
   -- Properties of before: all elements satisfy p (i.e., nr.lo < start)
   have h_before_all : ∀ nr ∈ before, p nr = true := by
     intro nr hmem
-    -- before = xs.takeWhile p
-    have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-    have : before = xs.takeWhile p := by
-      have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-      simp [split, before] at this ⊢
-      exact this.1
-    rw [this] at hmem
+    rw [h_before_eq] at hmem
     exact List.mem_takeWhile_imp hmem
 
   -- inserted doesn't satisfy p (inserted.lo = start, so not < start)
@@ -552,14 +553,14 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   -- Step 1: Get Pairwise on before (from xs)
   have hpw_before : List.Pairwise NR.before before := by
     exact List.Pairwise.sublist
-      (by simpa [split, before] using
-        (List.takeWhile_sublist p : (xs.takeWhile p).Sublist xs)) hpw
+      (by rw [h_before_eq]
+          exact (List.takeWhile_sublist p : (xs.takeWhile p).Sublist xs)) hpw
 
   -- Step 2: Extract Pairwise on after
   have hpw_after : List.Pairwise NR.before after := by
     exact List.Pairwise.sublist
-      (by simpa [split, after] using
-        (List.dropWhile_sublist p : (xs.dropWhile p).Sublist xs)) hpw
+      (by rw [h_after_eq]
+          exact (List.dropWhile_sublist p : (xs.dropWhile p).Sublist xs)) hpw
 
   have hchain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
   have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
