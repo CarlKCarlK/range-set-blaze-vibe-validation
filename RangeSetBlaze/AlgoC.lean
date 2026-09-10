@@ -172,17 +172,6 @@ private def algoCListSet (rs : List NR) : Set Int :=
 
 end LocalDefs
 
-@[reducible] private def loLE (a b : NR) : Prop :=
-  a.val.lo ≤ b.val.lo
-
-/-- Pairwise gap-separated ranges form a chain in nondecreasing lower-endpoint order. -/
-private lemma pairwise_before_implies_chain_loLE (xs : List NR)
-    (h : List.Pairwise NR.before xs) :
-    List.IsChain loLE xs := by
-  exact (h.imp fun hab => by
-    unfold loLE
-    exact (NR.before_lo_lt hab).le).isChain
-
 private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
   | [], _, h => by cases h
@@ -306,22 +295,10 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
           have h_head : NR.before current next := by
             unfold NR.before
             simpa using (not_le.mp hmerge)
-          have hchain : List.IsChain loLE (next :: tail) :=
-            pairwise_before_implies_chain_loLE (next :: tail) (by
-              cases hpwP with
-              | cons hx htail => exact List.Pairwise.cons hx htail)
-          have hnext_le : ∀ z ∈ tail, next.val.lo ≤ z.val.lo :=
-            fun z hz => hchain.rel_cons hz
           have h_current_tail : ∀ z ∈ tail, NR.before current z := by
             intro z hz
-            have hnext_gap : current.val.hi + 1 < next.val.lo := by
-              simpa [NR.before] using h_head
-            have hz_gap : current.val.hi + 1 < z.val.lo :=
-              lt_of_lt_of_le hnext_gap (hnext_le z hz)
-            simpa [NR.before] using hz_gap
-          have hpw_tail : List.Pairwise NR.before tail := by
-            cases hpwP with
-            | cons _ htail => exact htail
+            exact RangeSetBlaze.before_trans h_head
+              (List.rel_of_pairwise_cons hpwP hz)
           rw [h_loop_eq]
           constructor
           · intro b hb
@@ -333,7 +310,7 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
             · intro b hb
               cases hpwP with
               | cons hx _ => exact hx b hb
-            · exact hpw_tail
+            · exact hpwP.tail
         have hbound_out :
             ∀ nr ∈ ((deleteExtraNRs_loop current (next :: tail)).fst ::
               (deleteExtraNRs_loop current (next :: tail)).snd),
