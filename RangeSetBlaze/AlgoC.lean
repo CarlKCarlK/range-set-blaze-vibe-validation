@@ -195,28 +195,6 @@ private lemma pairwise_before_implies_chain_loLE (xs : List NR)
                 exact (NR.before_lo_lt (hxy y (by simp))).le
               · exact hchain_tail
 
-/-- If a list satisfies Pairwise and we decompose it as `pfx ++ [lastElem]`,
-then every element in pfx satisfies the pairwise relation with `lastElem`. -/
-private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
-    (pfx : List α) (lastElem : α)
-    (h : List.Pairwise R (pfx ++ [lastElem])) :
-    ∀ x ∈ pfx, R x lastElem := by
-  intro x hx
-  induction pfx with
-  | nil => cases hx
-  | cons y ys ih =>
-      simp at hx
-      cases hx with
-      | inl heq =>
-          subst heq
-          cases h with
-          | cons hy _ =>
-              exact hy lastElem (by simp)
-      | inr htail =>
-          cases h with
-          | cons _ hrest =>
-              exact ih hrest htail
-
 private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
   | [], _, h => by cases h
@@ -513,14 +491,8 @@ private lemma all_before_strict_before_start
     ∀ x ∈ before, x.val.hi + 1 < start := by
   -- every x ∈ (dropLast before) satisfies x ≺ last(before)
   have h_all : ∀ x ∈ List.dropLast before, NR.before x (before.getLast hne) := by
-    -- pairwise on (dropLast before ++ [last])
-    have : List.Pairwise NR.before (List.dropLast before ++ [before.getLast hne]) := by
-      -- standard: before = dropLast before ++ [getLast before]
-      have := List.dropLast_append_getLast hne
-      -- rewrite pairwise along equality
-      simpa [this] using hpair
-    -- extract cross-product from append
-    exact pairwise_prefix_last NR.before (List.dropLast before) (before.getLast hne) this
+    intro x hx
+    simpa using hpair.rel_dropLast_getLast hx
   -- now any x ∈ before is either the last or in dropLast
   intro x hx
   by_cases hdrop : x ∈ List.dropLast before
@@ -1034,10 +1006,12 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
                 rw [before_le_eq]
                 exact h_pw_take
 
-              -- Apply pairwise_prefix_last
+              -- Apply Pairwise relation from the prefix to the final element
               rw [h_init] at h_pw_before
               have h_before : nr ≺ x := by
-                exact pairwise_prefix_last (· ≺ ·) init x h_pw_before nr hnr_init
+                have hnr_drop : nr ∈ (init ++ [x]).dropLast := by
+                  simpa using hnr_init
+                simpa using h_pw_before.rel_dropLast_getLast hnr_drop
 
               -- Unfold the definition of ≺
               have : nr.val.hi + 1 < x.val.lo := h_before
