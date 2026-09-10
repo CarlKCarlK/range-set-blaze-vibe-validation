@@ -573,52 +573,15 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
   -- Step 1: Get Pairwise on before (from xs)
   have hpw_before : List.Pairwise NR.before before := by
-    have h_xs_decomp : xs = before ++ after := by
-      have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-      calc xs
-        _ = xs.takeWhile p ++ xs.dropWhile p := by
-          exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
-        _ = before ++ after := by
-          have h1 : before = xs.takeWhile p := by
-            have : split = (xs.takeWhile p, xs.dropWhile p) := this
-            simp [split, before] at this ⊢
-            exact this.1
-          have h2 : after = xs.dropWhile p := by
-            have : split = (xs.takeWhile p, xs.dropWhile p) :=
-              List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-            simp [split, after] at this ⊢
-            exact this.2
-          rw [h1, h2]
-    rw [h_xs_decomp] at hpw
-    exact (List.pairwise_append.mp hpw).1
+    exact List.Pairwise.sublist
+      (by simpa [split, before] using
+        (List.takeWhile_sublist p : (xs.takeWhile p).Sublist xs)) hpw
 
   -- Step 2: Extract Pairwise on after
   have hpw_after : List.Pairwise NR.before after := by
-    have h_xs_decomp : xs = before ++ after := by
-      have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-      calc xs
-        _ = xs.takeWhile p ++ xs.dropWhile p := by
-          exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
-        _ = before ++ after := by
-          have h1 : before = xs.takeWhile p := by
-            have : split = (xs.takeWhile p, xs.dropWhile p) := this
-            simp [split, before] at this ⊢
-            exact this.1
-          have h2 : after = xs.dropWhile p := by
-            have : split = (xs.takeWhile p, xs.dropWhile p) :=
-              List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-            simp [split, after] at this ⊢
-            exact this.2
-          rw [h1, h2]
-    rw [h_xs_decomp] at hpw
-    -- Extract Pairwise on after
-    revert hpw
-    induction before with
-    | nil => intro hpw; exact hpw
-    | cons x xs ih =>
-        intro hpw
-        cases hpw with
-        | cons _ hrest => exact ih hrest
+    exact List.Pairwise.sublist
+      (by simpa [split, after] using
+        (List.dropWhile_sublist p : (xs.dropWhile p).Sublist xs)) hpw
 
   have hchain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
   have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
