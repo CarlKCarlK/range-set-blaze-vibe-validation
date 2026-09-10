@@ -979,25 +979,12 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           -- extend case: prev.hi < r.hi, call internalAddC_extendPrev_safe
           rename_i prev h_last h_no_gap h_not_covered
           have h_extend : prev.val.hi < r.hi := not_le.mp h_not_covered
-          have h_start : r.lo = r.lo := rfl
-          have h_stop : r.hi = r.hi := rfl
-          -- Build the decomposition proof: span gives (before, after)
-          have h_decomp : List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges =
-                          (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges,
-                           List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) :=
-            List.span_eq_takeWhile_dropWhile _ _
-          -- Convert h_last from span.fst to takeWhile
-          have h_last_tw : (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).getLast? = some prev := by
-            have : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 =
-                   List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges :=
-              congrArg Prod.fst h_decomp
-            rw [← this]
-            exact h_last
-          -- Now apply the theorem with this decomposition
           exact internalAddC_extendPrev_safe_toSet s r r.lo r.hi
-                  (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
-                  (List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
-                  prev h_decomp h_last_tw h_no_gap h_extend h_start h_stop
+            (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+            (List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+            prev (List.span_eq_takeWhile_dropWhile _ _)
+            (by simpa only [List.span_eq_takeWhile_dropWhile] using h_last)
+            h_no_gap h_extend rfl rfl
 
 open Classical
 open IntRange
