@@ -620,42 +620,16 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
         cases hpw with
         | cons _ hrest => exact ih hrest
 
+  have hchain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
+  have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+    simpa [p, split, after] using
+      (span_suffix_all_ge_start_of_chain xs start hchain)
+
   -- Step 3: Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (result.fst :: result.snd)
   -- The weak version only requires Pairwise on `after`, not on (initial :: after)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
     have h_initial_lo : initial.val.lo = start := by
       simp [initial, curr, inserted, mkNR]
-    have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
-      intro nr hnr
-      have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-      have : after = xs.dropWhile p := by
-        have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-        simp [split, after] at this ⊢
-        exact this.2
-      rw [this] at hnr
-      by_cases h_empty : xs.dropWhile p = []
-      · rw [h_empty] at hnr; cases hnr
-      · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
-        rw [h_cons] at hnr
-        have h_first_ge : start ≤ first.val.lo := by
-          have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
-          have := List.head?_dropWhile_not (p := p) (l := xs)
-          rw [h_first_head] at this
-          simp at this
-          simp only [p, decide_eq_false_iff_not, not_lt] at this
-          exact this
-        have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
-        have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
-          have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
-          rw [← h_decomp] at h_chain
-          exact List.IsChain.right_of_append h_chain
-        rw [h_cons] at h_chain_drop
-        simp only [List.mem_cons] at hnr
-        rcases hnr with hnr_eq | hnr_tail
-        · rw [hnr_eq]; exact h_first_ge
-        · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-            h_chain_drop.rel_cons hnr_tail
-          exact le_trans h_first_ge h_nr_ge_first
     -- Apply the weak loop lemma - doesn't require Pairwise (initial :: after)
     exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
 
@@ -681,47 +655,6 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       -- Use deleteExtraNRs_loop_lo_ge to show result elements have lo ≥ start
       have h_initial_lo : initial.val.lo = start := by
         simp [initial, curr, inserted, mkNR]
-      have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
-        intro nr hnr
-        -- after = xs.dropWhile p where p checks lo < start
-        -- Elements in dropWhile don't satisfy p, so nr.lo ≥ start
-        have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-        have : after = xs.dropWhile p := by
-          have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-          simp [split, after] at this ⊢
-          exact this.2
-        rw [this] at hnr
-        -- Elements in dropWhile either failed the predicate or come after one that did
-        by_cases h_empty : xs.dropWhile p = []
-        · rw [h_empty] at hnr
-          cases hnr
-        · -- dropWhile is non-empty, so first element doesn't satisfy p
-          have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
-          rw [h_cons] at hnr
-          -- Use chain/pairwise to show all elements have lo ≥ start
-          have h_first_ge : start ≤ first.val.lo := by
-            have h_first_head : (xs.dropWhile p).head? = some first := by
-              rw [h_cons]; rfl
-            have := List.head?_dropWhile_not (p := p) (l := xs)
-            rw [h_first_head] at this
-            simp at this
-            simp only [p, decide_eq_false_iff_not, not_lt] at this
-            exact this
-          -- From Pairwise xs and chain properties, all elements after first also have lo ≥ start
-          -- For now, use that all elements maintain monotonicity
-          have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
-          have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
-            have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
-            rw [← h_decomp] at h_chain
-            exact List.IsChain.right_of_append h_chain
-          rw [h_cons] at h_chain_drop
-          simp only [List.mem_cons] at hnr
-          rcases hnr with hnr_eq | hnr_tail
-          · rw [hnr_eq]
-            exact h_first_ge
-          · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-              h_chain_drop.rel_cons hnr_tail
-            exact le_trans h_first_ge h_nr_ge_first
       have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
       simp only [List.mem_cons] at hy
       rcases hy with hy_eq | hy_tail
@@ -751,73 +684,11 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
         · -- y = result.fst
           have h_initial_lo : initial.val.lo = start := by
             simp [initial, curr, inserted, mkNR]
-          have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
-            intro nr hnr
-            have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-            have : after = xs.dropWhile p := by
-              have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-              simp [split, after] at this ⊢
-              exact this.2
-            rw [this] at hnr
-            by_cases h_empty : xs.dropWhile p = []
-            · rw [h_empty] at hnr; cases hnr
-            · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
-              rw [h_cons] at hnr
-              have h_first_ge : start ≤ first.val.lo := by
-                have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
-                have := List.head?_dropWhile_not (p := p) (l := xs)
-                rw [h_first_head] at this
-                simp at this
-                simp only [p, decide_eq_false_iff_not, not_lt] at this
-                exact this
-              have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
-              have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
-                have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
-                rw [← h_decomp] at h_chain
-                exact List.IsChain.right_of_append h_chain
-              rw [h_cons] at h_chain_drop
-              simp only [List.mem_cons] at hnr
-              rcases hnr with rfl | hnr_tail
-              · exact h_first_ge
-              · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-                  h_chain_drop.rel_cons hnr_tail
-                exact le_trans h_first_ge h_nr_ge_first
           have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
           rw [h_loop_props.1]
         · -- y ∈ result.snd
           have h_initial_lo : initial.val.lo = start := by
             simp [initial, curr, inserted, mkNR]
-          have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
-            intro nr hnr
-            have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-            have : after = xs.dropWhile p := by
-              have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
-              simp [split, after] at this ⊢
-              exact this.2
-            rw [this] at hnr
-            by_cases h_empty : xs.dropWhile p = []
-            · rw [h_empty] at hnr; cases hnr
-            · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
-              rw [h_cons] at hnr
-              have h_first_ge : start ≤ first.val.lo := by
-                have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
-                have := List.head?_dropWhile_not (p := p) (l := xs)
-                rw [h_first_head] at this
-                simp at this
-                simp only [p, decide_eq_false_iff_not, not_lt] at this
-                exact this
-              have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
-              have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
-                have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
-                rw [← h_decomp] at h_chain
-                exact List.IsChain.right_of_append h_chain
-              rw [h_cons] at h_chain_drop
-              simp only [List.mem_cons] at hnr
-              rcases hnr with rfl | hnr_tail
-              · exact h_first_ge
-              · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
-                  h_chain_drop.rel_cons hnr_tail
-                exact le_trans h_first_ge h_nr_ge_first
           have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
           exact h_loop_props.2 y hy_tail
 
