@@ -9,28 +9,14 @@ open scoped IntRange.NR
 section
 open Classical
 
-/-- Strictly before the current range (with a gap). -/
-def isBefore (curr : NR) (x : NR) : Prop :=
-  x ≺ curr
-
-/-- Strictly after the current range (with a gap). -/
-def isAfter (curr : NR) (x : NR) : Prop :=
-  curr ≺ x
-
-instance (curr : NR) : DecidablePred (isBefore curr) :=
-  fun x => inferInstanceAs (Decidable (x ≺ curr))
-
-instance (curr : NR) : DecidablePred (isAfter curr) :=
-  fun x => inferInstanceAs (Decidable (curr ≺ x))
-
 structure SplitWitness (curr : NR) (xs : List NR) where
   before : List NR
   touching : List NR
   after : List NR
   order : xs = before ++ touching ++ after
-  before_ok : ∀ {b}, b ∈ before → isBefore curr b
+  before_ok : ∀ {b}, b ∈ before → b ≺ curr
   touch_ok : ∀ {t}, t ∈ touching → NR.mergeable curr t
-  after_ok : ∀ {a}, a ∈ after → isAfter curr a
+  after_ok : ∀ {a}, a ∈ after → curr ≺ a
 
 mutual
   def splitBefore (curr : NR) :
@@ -113,7 +99,7 @@ mutual
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
                         simp [hs]
-                      have hb_before : isBefore curr b :=
+                      have hb_before : b ≺ curr :=
                         tail.before_ok hbmem
                       -- Put tail.order directly into a cons-shaped equality
                       have horder_cons :
@@ -123,7 +109,7 @@ mutual
                       -- If head is b, then y = b
                       have hy_eq : y = b := (List.cons.inj horder_cons).1
                       -- So y is also before curr
-                      have hy_before : isBefore curr y := by
+                      have hy_before : y ≺ curr := by
                         simpa [hy_eq] using hb_before
                       -- But `y` is mergeable with `curr`, so it is not before it.
                       have : False := by
@@ -168,13 +154,13 @@ mutual
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
                         simp [hs]
-                      have hb_before : isBefore curr b := tail.before_ok hbmem
+                      have hb_before : b ≺ curr := tail.before_ok hbmem
                       have horder_cons :
                           y :: ys =
                             b :: (bs ++ tail.touching ++ tail.after) := by
                         simpa [hs, List.cons_append, List.append_assoc] using tail.order
                       have hy_eq : y = b := (List.cons.inj horder_cons).1
-                      have hy_before : isBefore curr y := by
+                      have hy_before : y ≺ curr := by
                         simpa [hy_eq] using hb_before
                       exact (NR.before_asymm hy hy_before).elim
 
@@ -207,7 +193,7 @@ mutual
                 simpa [ht'] using hx
               after_ok := tail.after_ok }
 
-  def splitAfter (curr : NR) (x : NR) (hx : isAfter curr x) :
+  def splitAfter (curr : NR) (x : NR) (hx : curr ≺ x) :
       (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
       SplitWitness curr (x :: xs)
     | [], _ =>
@@ -241,13 +227,13 @@ mutual
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
                         simp [hs]
-                      have hb_before : isBefore curr b := tail.before_ok hbmem
+                      have hb_before : b ≺ curr := tail.before_ok hbmem
                       have horder_cons :
                           y :: ys =
                             b :: (bs ++ tail.touching ++ tail.after) := by
                         simpa [hs, List.cons_append, List.append_assoc] using tail.order
                       have hy_eq : y = b := (List.cons.inj horder_cons).1
-                      have hy_before : isBefore curr y := by
+                      have hy_before : y ≺ curr := by
                         simpa [hy_eq] using hb_before
                       exact (NR.before_asymm hy hy_before).elim
 
@@ -321,7 +307,7 @@ theorem splitTouching_tail_before_nil
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `touching` block. -/
 theorem splitAfter_tail_touching_nil
-    (curr y : NR) (hy : isAfter curr y)
+    (curr y : NR) (hy : curr ≺ y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitAfter curr y hy ys ok).touching = [] := by
   revert y hy ok
@@ -345,7 +331,7 @@ theorem splitAfter_tail_touching_nil
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `before` block. -/
 theorem splitAfter_tail_before_nil
-    (curr y : NR) (hy : isAfter curr y)
+    (curr y : NR) (hy : curr ≺ y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitAfter curr y hy ys ok).before = [] := by
   revert y hy ok
