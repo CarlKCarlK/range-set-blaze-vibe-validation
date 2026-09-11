@@ -209,6 +209,22 @@ lemma glue_sets (a b : NR)
           simpa [before] using this))
   simpa [glue] using this
 
+/-- A range before both inputs is before their glue. -/
+lemma before_glue {z a b : NR}
+    (hza : z ≺ a) (hzb : z ≺ b) :
+    z ≺ glue a b := by
+  unfold before glue IntRange.mergeRange at *
+  have : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
+  simpa using this
+
+/-- The glue of two ranges before a third range is also before it. -/
+lemma glue_before {a b z : NR}
+    (haz : a ≺ z) (hbz : b ≺ z) :
+    glue a b ≺ z := by
+  unfold before glue IntRange.mergeRange at *
+  rw [max_add]
+  exact max_lt haz hbz
+
 /-- Lower-endpoint preorder: `a` starts no later than `b` (`a.lo ≤ b.lo`). -/
 def startsBefore (a b : NR) : Prop := a.val.lo ≤ b.val.lo
 
@@ -292,13 +308,6 @@ lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
     linarith
   have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
   exact lt_of_le_of_lt h₁ h₃
-
-lemma before_glue_of_before {z a b : NR}
-    (hza : z ≺ a) (hzb : z ≺ b) :
-    z ≺ IntRange.NR.glue a b := by
-  unfold NR.before IntRange.NR.glue IntRange.mergeRange at *
-  have : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
-  simpa using this
 
 lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
     a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
@@ -407,7 +416,7 @@ private def insert
                 intro w hw
                 exact hzxs w (List.mem_cons_of_mem _ hw)
               have hzx : z ≺ x := hzxs x (by simp)
-              have hzg : z ≺ glued := before_glue_of_before hzc hzx
+              have hzg : z ≺ glued := NR.before_glue hzc hzx
               exact hmon hz_tail hzg y hy
           ⟨ys, hpair, setEq, mono⟩
 

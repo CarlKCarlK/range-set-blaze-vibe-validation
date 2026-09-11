@@ -551,7 +551,7 @@ lemma buildSplit_pairwise
           have htouch_head : isTouch acc t := htouch_ts t (by simp)
           have hbefore_head : b ≺ t := hbefore_ts t (by simp)
           have hb_glued : b ≺ NR.glue acc t :=
-            before_glue_of_before hb_acc hbefore_head
+            NR.before_glue hb_acc hbefore_head
           have htouch_tail :
               ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
             intro u hu
@@ -591,42 +591,8 @@ lemma buildSplit_pairwise
           intro htouch_ts hbefore_ts hacc
           have htouch_head : isTouch acc t := htouch_ts t (by simp)
           have ht_before : t ≺ a := hbefore_ts t (by simp)
-          have h_glued : NR.glue acc t ≺ a := by
-            unfold NR.before IntRange.NR.glue IntRange.mergeRange
-            have hmax_lt :
-                max (acc.val.hi + 1) (t.val.hi + 1) < a.val.lo :=
-              max_lt_iff.mpr ⟨hacc, ht_before⟩
-            have hmax_succ_le :
-                max acc.val.hi t.val.hi + 1 ≤
-                    max (acc.val.hi + 1) (t.val.hi + 1) := by
-              by_cases h : acc.val.hi ≤ t.val.hi
-              ·
-                have hmax_le : max acc.val.hi t.val.hi ≤ t.val.hi :=
-                  max_le_iff.mpr ⟨h, le_rfl⟩
-                have hmax_succ_le' :
-                    max acc.val.hi t.val.hi + 1 ≤ t.val.hi + 1 :=
-                  by
-                    have := add_le_add_right hmax_le (1 : Int)
-                    simpa using this
-                have t_succ_le :
-                    t.val.hi + 1 ≤
-                      max (acc.val.hi + 1) (t.val.hi + 1) :=
-                  le_max_right _ _
-                exact le_trans hmax_succ_le' t_succ_le
-              · have h' : t.val.hi ≤ acc.val.hi := le_of_not_ge h
-                have hmax_le : max acc.val.hi t.val.hi ≤ acc.val.hi :=
-                  max_le_iff.mpr ⟨le_rfl, h'⟩
-                have hmax_succ_le' :
-                    max acc.val.hi t.val.hi + 1 ≤ acc.val.hi + 1 :=
-                  by
-                    have := add_le_add_right hmax_le (1 : Int)
-                    simpa using this
-                have acc_succ_le :
-                    acc.val.hi + 1 ≤
-                      max (acc.val.hi + 1) (t.val.hi + 1) :=
-                  le_max_left _ _
-                exact le_trans hmax_succ_le' acc_succ_le
-            exact lt_of_le_of_lt hmax_succ_le hmax_lt
+          have h_glued : NR.glue acc t ≺ a :=
+            NR.glue_before hacc ht_before
           have htouch_tail :
               ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
             intro u hu
