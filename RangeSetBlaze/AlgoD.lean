@@ -270,22 +270,95 @@ private theorem predecessor_reuse_preserves_order_and_union
     (ranges : List NR) (input predecessor : NR)
     (hpw : List.Pairwise NR.before ranges)
     (hprev : (lowerBoundGap input.val.lo ranges).peekPrev = some predecessor)
-    (hmerge : NR.mergeable predecessor input)
-    (hextend : predecessor.val.hi < input.val.hi) :
+    (hmerge : NR.mergeable predecessor input) :
     let gap := lowerBoundGap input.val.lo ranges
     let grown := NR.glue predecessor input
     let scanned := absorbSuccessors grown gap.right
     let result := replaceStoredPredecessor gap scanned.fst scanned.snd
     List.Pairwise NR.before result ∧
       rangesToSet result = rangesToSet ranges ∪ input.val.toSet := by
-  sorry
+  dsimp
+  have hgap := lowerBoundGap_spec ranges input.val.lo hpw
+  rcases hgap with ⟨hsource, hleft, hright⟩
+  let gap := lowerBoundGap input.val.lo ranges
+  change ranges = gap.left ++ gap.right at hsource
+  change (∀ nr ∈ gap.left, nr.val.lo < input.val.lo) at hleft
+  change (∀ nr ∈ gap.right, input.val.lo ≤ nr.val.lo) at hright
+  change gap.left.getLast? = some predecessor at hprev
+  have hleft_last : gap.left ≠ [] := by
+    intro hempty
+    simp [hempty] at hprev
+  obtain ⟨pre, hprefix⟩ := (List.getLast?_eq_some_iff.mp hprev)
+  have hleft_decomp : gap.left = pre ++ [predecessor] := hprefix
+  have hpred_left : ∀ nr ∈ pre, nr ≺ predecessor := by
+    intro nr hmem
+    have hp : List.Pairwise NR.before gap.left :=
+      (List.pairwise_append.mp (hsource ▸ hpw)).1
+    rw [hleft_decomp] at hp
+    exact (List.pairwise_append.mp hp).2.2 nr hmem predecessor (by simp)
+  have hpred_lo : predecessor.val.lo < input.val.lo := by
+    apply hleft
+    rw [hleft_decomp]
+    simp
+  have hscan := absorbSuccessors_preserves_order_lower_bound_and_union
+    predecessor.val.lo (NR.glue predecessor input) gap.right
+    (by
+      simp [NR.glue, IntRange.mergeRange, min_eq_left (le_of_lt hpred_lo)])
+    (List.pairwise_append.mp (hsource ▸ hpw)).2.1
+    (by
+      intro nr hmem
+      exact le_trans (le_of_lt hpred_lo) (hright nr hmem))
+  have hprefix_pair : List.Pairwise NR.before pre := by
+    have hp : List.Pairwise NR.before gap.left :=
+      (List.pairwise_append.mp (hsource ▸ hpw)).1
+    rw [hleft_decomp] at hp
+    exact (List.pairwise_append.mp hp).1
+  have hcross : ∀ p ∈ pre, ∀ nr ∈ gap.right,
+      p ≺ nr := by
+    intro p hp nr hn
+    exact before_trans (hpred_left p hp)
+      ((List.pairwise_append.mp (hsource ▸ hpw)).2.2
+        predecessor (by simp [hleft_decomp]) nr hn)
+  have hprefix_scan : ∀ p ∈ pre, ∀ nr ∈
+      ((absorbSuccessors (NR.glue predecessor input) gap.right).fst ::
+        (absorbSuccessors (NR.glue predecessor input) gap.right).snd),
+      p ≺ nr := by
+    intro p hp nr hn
+    have hnr := hscan.2.1 nr hn
+    unfold NR.before at *
+    have hp' := hpred_left p hp
+    have hlo : predecessor.val.lo ≤ (NR.glue predecessor input).val.lo := by
+      simp [NR.glue, IntRange.mergeRange, min_eq_left (le_of_lt hpred_lo)]
+    have hbefore : p.val.hi + 1 < predecessor.val.lo := hp'
+    have hglue : predecessor.val.lo ≤ (NR.glue predecessor input).val.lo := hlo
+    linarith
+  have hpair : List.Pairwise NR.before
+      (pre ++ (absorbSuccessors (NR.glue predecessor input) gap.right).fst ::
+        (absorbSuccessors (NR.glue predecessor input) gap.right).snd) := by
+    apply List.pairwise_append.mpr
+    refine ⟨hprefix_pair, hscan.1, ?_⟩
+    exact hprefix_scan
+  have hsets : rangesToSet
+      (pre ++ (absorbSuccessors (NR.glue predecessor input) gap.right).fst ::
+        (absorbSuccessors (NR.glue predecessor input) gap.right).snd) =
+      rangesToSet ranges ∪ input.val.toSet := by
+    rw [rangesToSet_append, hscan.2.2]
+    rw [NR.glue_sets predecessor input hmerge]
+    have hsourceSet : rangesToSet ranges =
+        rangesToSet pre ∪ predecessor.val.toSet ∪ rangesToSet gap.right := by
+      rw [hsource, hleft_decomp, rangesToSet_append]
+      simp [rangesToSet_append]
+    rw [hsourceSet]
+    ac_rfl
+  exact ⟨by simpa [replaceStoredPredecessor, gap, hleft_decomp] using hpair,
+    by simpa [replaceStoredPredecessor, gap, hleft_decomp] using hsets⟩
 
 /-- With a genuine left boundary, scanning a fresh input accumulator and then
 performing `insert_before` preserves canonical form and exact union. -/
 private theorem fresh_accumulator_preserves_order_and_union
     (ranges : List NR) (input : NR)
     (hpw : List.Pairwise NR.before ranges)
-    (hleft : ∀ predecessor,
+    (hleftPred : ∀ predecessor,
       (lowerBoundGap input.val.lo ranges).peekPrev = some predecessor →
       predecessor ≺ input) :
     let gap := lowerBoundGap input.val.lo ranges
@@ -293,7 +366,88 @@ private theorem fresh_accumulator_preserves_order_and_union
     let result := gap.insertBefore scanned.fst scanned.snd
     List.Pairwise NR.before result ∧
       rangesToSet result = rangesToSet ranges ∪ input.val.toSet := by
-  sorry
+  dsimp
+  have hgap := lowerBoundGap_spec ranges input.val.lo hpw
+  rcases hgap with ⟨hsource, hleft, hright⟩
+  let gap := lowerBoundGap input.val.lo ranges
+  change ranges = gap.left ++ gap.right at hsource
+  change (∀ nr ∈ gap.left, nr.val.lo < input.val.lo) at hleft
+  change (∀ nr ∈ gap.right, input.val.lo ≤ nr.val.lo) at hright
+  have hpred_mem : ∀ predecessor,
+      gap.left.getLast? = some predecessor → predecessor ∈ ranges := by
+    intro predecessor hpred
+    rw [hsource]
+    apply List.mem_append.mpr
+    exact Or.inl (List.mem_of_mem_getLast? (by rw [hpred]; simp))
+  have hsucc_mem : ∀ successor,
+      gap.right.head? = some successor → successor ∈ ranges := by
+    intro successor hsucc
+    rw [hsource]
+    apply List.mem_append.mpr
+    exact Or.inr (List.mem_of_mem_head? (by rw [hsucc]; simp))
+  have hwhole : List.Pairwise NR.before (gap.left ++ gap.right) :=
+    hsource ▸ hpw
+  have hpred_mem : ∀ predecessor,
+      gap.left.getLast? = some predecessor → predecessor ∈ ranges := by
+    intro predecessor hpred
+    rw [hsource]
+    exact List.mem_append_left _
+      (List.mem_of_mem_getLast? (by rw [hpred]; simp))
+  have hsucc_mem : ∀ successor,
+      gap.right.head? = some successor → successor ∈ ranges := by
+    intro successor hsucc
+    rw [hsource]
+    exact List.mem_append_right _
+      (List.mem_of_mem_head? (by rw [hsucc]; simp))
+  have hscan := absorbSuccessors_preserves_order_lower_bound_and_union
+    input.val.lo input gap.right rfl
+    (List.pairwise_append.mp hwhole).2.1 hright
+  have hleft_pair : List.Pairwise NR.before gap.left :=
+    (List.pairwise_append.mp hwhole).1
+  have hleft_before_input : ∀ p ∈ gap.left, p ≺ input := by
+    intro p hp
+    by_cases hempty : gap.left = []
+    · simp [hempty] at hp
+    · have hlast := List.getLast?_eq_some_getLast hempty
+      let predecessor := gap.left.getLast hempty
+      have hprev : gap.left.getLast? = some predecessor := hlast
+      have hpred_input := hleftPred predecessor
+        (by simpa [gap, CursorGap.peekPrev] using hprev)
+      have hdecomp : ∃ pre, gap.left = pre ++ [predecessor] :=
+        List.getLast?_eq_some_iff.mp hprev
+      rcases hdecomp with ⟨pre, hdecomp⟩
+      have hpwleft := hleft_pair
+      rw [hdecomp] at hpwleft
+      rcases (by simpa [hdecomp] using hp : p ∈ pre ∨ p = predecessor) with hp | rfl
+      · have hp_before_pred := (List.pairwise_append.mp hpwleft).2.2 p
+          hp predecessor (by simp)
+        exact before_trans hp_before_pred hpred_input
+      · exact hpred_input
+  have hleft_to_scan : ∀ p ∈ gap.left, ∀ nr ∈
+      (absorbSuccessors input gap.right).fst ::
+        (absorbSuccessors input gap.right).snd, p ≺ nr := by
+    intro p hp nr hn
+    have hpl := hleft_before_input p hp
+    have hnr := hscan.2.1 nr hn
+    unfold NR.before at *
+    linarith
+  have hpair : List.Pairwise NR.before
+      (gap.left ++ (absorbSuccessors input gap.right).fst ::
+        (absorbSuccessors input gap.right).snd) := by
+    apply List.pairwise_append.mpr
+    exact ⟨hleft_pair, hscan.1, hleft_to_scan⟩
+  have hsets : rangesToSet
+      (gap.left ++ (absorbSuccessors input gap.right).fst ::
+        (absorbSuccessors input gap.right).snd) =
+      rangesToSet ranges ∪ input.val.toSet := by
+    rw [rangesToSet_append, hscan.2.2]
+    have hsourceSet : rangesToSet ranges =
+        rangesToSet gap.left ∪ rangesToSet gap.right := by
+      rw [hsource, rangesToSet_append]
+    rw [hsourceSet]
+    ac_rfl
+  exact ⟨by simpa [CursorGap.insertBefore, gap] using hpair,
+    by simpa [CursorGap.insertBefore, gap] using hsets⟩
 
 /-- The raw cursor-shaped computation has the two properties needed to package
 its output as a `RangeSetBlaze`.  Its eventual proof follows the executable
@@ -304,7 +458,97 @@ private theorem internalAddDNRs_preserves_order_and_union
     List.Pairwise NR.before (internalAddDNRs ranges input) ∧
       rangesToSet (internalAddDNRs ranges input) =
         rangesToSet ranges ∪ input.val.toSet := by
-  sorry
+  classical
+  let gap := lowerBoundGap input.val.lo ranges
+  have hgap := lowerBoundGap_spec ranges input.val.lo hpw
+  rcases hgap with ⟨hsource, hleft, hright⟩
+  change ranges = gap.left ++ gap.right at hsource
+  change (∀ nr ∈ gap.left, nr.val.lo < input.val.lo) at hleft
+  change (∀ nr ∈ gap.right, input.val.lo ≤ nr.val.lo) at hright
+  have hwhole : List.Pairwise NR.before (gap.left ++ gap.right) :=
+    hsource ▸ hpw
+  have hpred_mem_dispatch : ∀ predecessor,
+      gap.left.getLast? = some predecessor → predecessor ∈ ranges := by
+    intro predecessor hpred
+    rw [hsource]
+    exact List.mem_append_left _
+      (List.mem_of_mem_getLast? (by rw [hpred]; simp))
+  have hsucc_mem_dispatch : ∀ successor,
+      gap.right.head? = some successor → successor ∈ ranges := by
+    intro successor hsucc
+    rw [hsource]
+    exact List.mem_append_right _
+      (List.mem_of_mem_head? (by rw [hsucc]; simp))
+  dsimp [internalAddDNRs]
+  split
+  · rename_i predecessor hprev
+    change gap.left.getLast? = some predecessor at hprev
+    split
+    · rename_i hmerge
+      split
+      · rename_i hcontains
+        exact ⟨hpw, predecessor_containment_preserves_union ranges input predecessor
+          (hpred_mem_dispatch predecessor hprev)
+          (le_of_lt (hleft predecessor (by
+            exact List.mem_of_mem_getLast? (by rw [hprev]; simp))))
+          hcontains⟩
+      · rename_i hextend
+        simpa [gap] using
+          predecessor_reuse_preserves_order_and_union ranges input predecessor hpw
+            hprev hmerge
+    · rename_i hnotmerge
+      split
+      · rename_i successor hnext
+        change gap.right.head? = some successor at hnext
+        split
+        · rename_i hcontains
+          exact ⟨hpw, exactStart_successor_containment_preserves_union ranges input successor
+            (hsucc_mem_dispatch successor hnext) hcontains.1 hcontains.2⟩
+        · rename_i hnotcontains
+          apply fresh_accumulator_preserves_order_and_union ranges input hpw
+          intro pred hpred
+          change gap.left.getLast? = some pred at hpred
+          have heq : pred = predecessor := by simpa [hprev] using hpred.symm
+          subst pred
+          have hpred_lo : predecessor.val.lo ≤ input.val.lo :=
+            (hleft predecessor (List.mem_of_mem_getLast? (by rw [hprev]; simp))).le
+          by_contra hbefore
+          exact hnotmerge (NR.mergeable_of_startsBefore_of_not_before
+              (show NR.startsBefore predecessor input from hpred_lo) hbefore)
+      · rename_i hnext
+        change gap.right.head? = none at hnext
+        apply fresh_accumulator_preserves_order_and_union ranges input hpw
+        intro pred hpred
+        change gap.left.getLast? = some pred at hpred
+        have heq : pred = predecessor := by simpa [hprev] using hpred.symm
+        subst pred
+        have hpred_lo : predecessor.val.lo ≤ input.val.lo :=
+          (hleft predecessor (List.mem_of_mem_getLast? (by rw [hprev]; simp))).le
+        by_contra hbefore
+        exact hnotmerge (NR.mergeable_of_startsBefore_of_not_before
+          (show NR.startsBefore predecessor input from hpred_lo) hbefore)
+  · rename_i hprev
+    change gap.left.getLast? = none at hprev
+    cases hnext : gap.right.head? with
+    | some successor =>
+      simp [gap, CursorGap.peekNext, hnext]
+      split
+      · rename_i hcontains
+        exact ⟨hpw, exactStart_successor_containment_preserves_union ranges input successor
+          (hsucc_mem_dispatch successor hnext) hcontains.1 hcontains.2⟩
+      · rename_i hnotcontains
+        apply fresh_accumulator_preserves_order_and_union ranges input hpw
+        intro pred hpred
+        change gap.left.getLast? = some pred at hpred
+        rw [hprev] at hpred
+        simp at hpred
+    | none =>
+      simp [gap, CursorGap.peekNext, hnext]
+      apply fresh_accumulator_preserves_order_and_union ranges input hpw
+      intro pred hpred
+      change gap.left.getLast? = some pred at hpred
+      rw [hprev] at hpred
+      simp at hpred
 
 /-- Algo D insertion.  Empty intervals are no-ops; nonempty intervals execute
 the cursor-shaped raw algorithm and package its canonical-list contract. -/
