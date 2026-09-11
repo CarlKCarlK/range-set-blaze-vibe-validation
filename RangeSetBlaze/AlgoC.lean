@@ -90,21 +90,6 @@ private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (Li
   deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
   simp [deleteExtraNRs_loop, h]
 
-/-- If two ordered ranges touch or overlap, their union equals the single
-closed interval that stretches to the larger upper end. -/
-private lemma union_touch_eq_Icc_max
-    (lo₁ hi₁ lo₂ hi₂ : Int)
-    (h₁ : lo₁ ≤ hi₁) (h₂ : lo₂ ≤ hi₂)
-    (h_order : lo₁ ≤ lo₂)
-    (h_touch : ¬ (hi₁ + 1 < lo₂)) :
-    Set.Icc lo₁ hi₁ ∪ Set.Icc lo₂ hi₂ =
-      Set.Icc lo₁ (max hi₁ hi₂) := by
-  ext x
-  simp only [Set.mem_union, Set.mem_Icc]
-  have _ := h₁
-  have _ := h₂
-  omega
-
 /-- Set-level description of a single merge step inside `deleteExtraNRs`. -/
 private lemma merge_step_sets
     (current next : NR)
@@ -117,13 +102,11 @@ private lemma merge_step_sets
           have : current.val.hi ≤ max current.val.hi next.val.hi :=
             le_max_left _ _
           exact le_trans hc this)).val.toSet := by
-  classical
-  have h₁ : current.val.lo ≤ current.val.hi := current.property
-  have h₂ : next.val.lo ≤ next.val.hi := next.property
-  have h_union :=
-    union_touch_eq_Icc_max current.val.lo current.val.hi
-      next.val.lo next.val.hi h₁ h₂ horder htouch
-  simpa [IntRange.toSet, mkNR] using h_union
+  have hmergeable : NR.mergeable current next :=
+    NR.mergeable_of_startsBefore_of_not_before
+      (show NR.startsBefore current next from horder) htouch
+  simpa [NR.glue, IntRange.mergeRange, mkNR, min_eq_left horder] using
+    (NR.glue_sets current next hmergeable).symm
 
 /-- Locate the first range not strictly before `start`, extend its upper
 endpoint through `stop`, and merge any following ranges that no longer have a

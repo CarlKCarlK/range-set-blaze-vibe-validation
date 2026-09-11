@@ -17,18 +17,11 @@ def isBefore (curr : NR) (x : NR) : Prop :=
 def isAfter (curr : NR) (x : NR) : Prop :=
   curr ≺ x
 
-/-- Touching or overlapping the current range. -/
-def isTouch (curr : NR) (x : NR) : Prop :=
-  ¬ x ≺ curr ∧ ¬ curr ≺ x
-
 instance (curr : NR) : DecidablePred (isBefore curr) :=
   fun x => inferInstanceAs (Decidable (x ≺ curr))
 
 instance (curr : NR) : DecidablePred (isAfter curr) :=
   fun x => inferInstanceAs (Decidable (curr ≺ x))
-
-instance (curr : NR) : DecidablePred (isTouch curr) :=
-  fun x => inferInstanceAs (Decidable (¬ x ≺ curr ∧ ¬ curr ≺ x))
 
 structure SplitWitness (curr : NR) (xs : List NR) where
   before : List NR
@@ -36,7 +29,7 @@ structure SplitWitness (curr : NR) (xs : List NR) where
   after : List NR
   order : xs = before ++ touching ++ after
   before_ok : ∀ {b}, b ∈ before → isBefore curr b
-  touch_ok : ∀ {t}, t ∈ touching → isTouch curr t
+  touch_ok : ∀ {t}, t ∈ touching → NR.mergeable curr t
   after_ok : ∀ {a}, a ∈ after → isAfter curr a
 
 mutual
@@ -76,12 +69,12 @@ mutual
                     exact tail.before_ok hbMem
               touch_ok := tail.touch_ok
               after_ok := tail.after_ok }
-        | NR.Rel3.overlap hx₁ hx₂ =>
-            splitTouching curr x ⟨hx₁, hx₂⟩ xs ok
+        | NR.Rel3.mergeable hx =>
+            splitTouching curr x (NR.mergeable_comm.mp hx) xs ok
         | NR.Rel3.right hx =>
             splitAfter curr x hx xs ok
 
-  def splitTouching (curr : NR) (x : NR) (hx : isTouch curr x) :
+  def splitTouching (curr : NR) (x : NR) (hx : NR.mergeable curr x) :
       (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
       SplitWitness curr (x :: xs)
     | [], _ =>
@@ -104,10 +97,10 @@ mutual
         match NR.Rel3.classify y curr with
         | NR.Rel3.left hy =>
             have hFalse : False :=
-              hx.1 (before_trans xBeforeY hy)
+              hx.2 (before_trans xBeforeY hy)
             False.elim hFalse
-        | NR.Rel3.overlap hy₁ hy₂ =>
-            let tail := splitTouching curr y ⟨hy₁, hy₂⟩ ys okTail
+        | NR.Rel3.mergeable hy =>
+            let tail := splitTouching curr y (NR.mergeable_comm.mp hy) ys okTail
             { before := []
               touching := x :: tail.touching
               after := tail.after
@@ -132,11 +125,9 @@ mutual
                       -- So y is also before curr
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
-                      -- But we are in the "overlap" case, i.e. y touches curr
-                      -- Contradiction: touching means ¬ y ≺ curr
+                      -- But `y` is mergeable with `curr`, so it is not before it.
                       have : False := by
-                        have htouch_y : isTouch curr y := ⟨hy₁, hy₂⟩
-                        exact htouch_y.1 hy_before
+                        exact hy.1 hy_before
                       exact this.elim
 
                 -- With tail.before = [], tail.order simplifies to the desired concatenation
@@ -194,15 +185,15 @@ mutual
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
                         simp [hs]
-                      have ht_touch : isTouch curr t := tail.touch_ok htmem
+                      have ht_touch : NR.mergeable curr t := tail.touch_ok htmem
                       have horder' :
                           y :: ys =
                             t :: (ts ++ tail.after) := by
                         simpa [hbefore, hs] using tail.order
                       have hy_eq : y = t := (List.cons.inj horder').1
-                      have hy_touch : isTouch curr y := by
+                      have hy_touch : NR.mergeable curr y := by
                         simpa [hy_eq] using ht_touch
-                      exact (hy_touch.2 hy).elim
+                      exact (hy_touch.1 hy).elim
 
                 have h : y :: ys = tail.after := by
                   have h := tail.order
@@ -267,15 +258,15 @@ mutual
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
                         simp [hs]
-                      have ht_touch : isTouch curr t := tail.touch_ok htmem
+                      have ht_touch : NR.mergeable curr t := tail.touch_ok htmem
                       have horder' :
                           y :: ys =
                             t :: (ts ++ tail.after) := by
                         simpa [hbefore, hs] using tail.order
                       have hy_eq : y = t := (List.cons.inj horder').1
-                      have hy_touch : isTouch curr y := by
+                      have hy_touch : NR.mergeable curr y := by
                         simpa [hy_eq] using ht_touch
-                      exact (hy_touch.2 hy).elim
+                      exact (hy_touch.1 hy).elim
 
                 have h :
                     y :: ys = tail.after := by
@@ -299,16 +290,16 @@ mutual
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
             (NR.before_asymm hcy hy).elim
-        | NR.Rel3.overlap _ hy₂ =>
+        | NR.Rel3.mergeable hy =>
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
-            False.elim (hy₂ hcy)
+            False.elim (hy.2 hcy)
 end
 
 /-- Once we are in the touching phase, the recursive tail cannot place any
 element in the `before` block. -/
 theorem splitTouching_tail_before_nil
-    (curr y : NR) (hy : isTouch curr y)
+    (curr y : NR) (hy : NR.mergeable curr y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitTouching curr y hy ys ok).before = [] := by
   revert y hy ok
@@ -321,8 +312,8 @@ theorem splitTouching_tail_before_nil
       have hyz : y ≺ z := hx_tail _ (by simp)
       cases hcls : NR.Rel3.classify z curr with
       | left hz =>
-          exact (hy.1 (before_trans hyz hz)).elim
-      | overlap hz₁ hz₂ =>
+          exact (hy.2 (before_trans hyz hz)).elim
+      | mergeable hz =>
           simp [splitTouching, hcls]
       | right hz =>
           simp [splitTouching, hcls]
@@ -347,9 +338,9 @@ theorem splitAfter_tail_touching_nil
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (NR.before_asymm hcy hz).elim
-      | overlap hz₁ hz₂ =>
+      | mergeable hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz₂ hcy).elim
+          exact (hz.2 hcy).elim
 
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `before` block. -/
@@ -371,9 +362,9 @@ theorem splitAfter_tail_before_nil
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (NR.before_asymm hcy hz).elim
-      | overlap hz₁ hz₂ =>
+      | mergeable hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz₂ hcy).elim
+          exact (hz.2 hcy).elim
 
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
 def splitRanges (curr : NR) (xs : List NR)
@@ -385,49 +376,48 @@ def splitRanges (curr : NR) (xs : List NR)
 def glueMany (curr : NR) (ts : List NR) : NR :=
   ts.foldl (fun acc t => NR.glue acc t) curr
 
-lemma touch_after_glue_step
+lemma mergeable_after_glue_step
     (curr x y : NR)
-    (hx : isTouch curr x)
-    (hy : isTouch curr y) :
-    isTouch (NR.glue curr x) y := by
+    (hx : NR.mergeable curr x)
+    (hy : NR.mergeable curr y) :
+    NR.mergeable (NR.glue curr x) y := by
   rcases hx with ⟨hx₁, hx₂⟩
   rcases hy with ⟨hy₁, hy₂⟩
   constructor
   · intro h
     unfold NR.glue IntRange.mergeRange NR.before at h
-    have : y.val.hi + 1 < curr.val.lo :=
-      lt_of_lt_of_le h (min_le_left _ _)
+    have hmax :
+        curr.val.hi + 1 ≤ (max curr.val.hi x.val.hi) + 1 := by
+      have h := add_le_add_right (le_max_left curr.val.hi x.val.hi) (1 : Int)
+      simpa using h
+    have : curr.val.hi + 1 < y.val.lo := lt_of_le_of_lt hmax h
     exact hy₁ this
   · intro h
     unfold NR.glue IntRange.mergeRange NR.before at h
-    have hmax :
-        curr.val.hi + 1 ≤ (max curr.val.hi x.val.hi) + 1 :=
-      by
-        have h := add_le_add_right (le_max_left curr.val.hi x.val.hi) (1 : Int)
-        simpa using h
-    have : curr.val.hi + 1 < y.val.lo := lt_of_le_of_lt hmax h
+    have : y.val.hi + 1 < curr.val.lo :=
+      lt_of_lt_of_le h (min_le_left _ _)
     exact hy₂ this
 
-lemma glueMany_sets_touching
+lemma glueMany_sets_mergeable
     (curr : NR) (ts : List NR)
-    (htouch : ∀ t ∈ ts, isTouch curr t) :
+    (htouch : ∀ t ∈ ts, NR.mergeable curr t) :
     (glueMany curr ts).val.toSet =
       curr.val.toSet ∪ rangesToSet ts := by
   induction ts generalizing curr with
   | nil =>
       simp [glueMany]
   | cons t ts ih =>
-      have htouch_t : isTouch curr t := htouch _ (by simp)
-      have htouch_tail : ∀ u ∈ ts, isTouch curr u := by
+      have htouch_t : NR.mergeable curr t := htouch _ (by simp)
+      have htouch_tail : ∀ u ∈ ts, NR.mergeable curr u := by
         intro u hu; exact htouch u (by simp [hu])
       have hglue :
           (NR.glue curr t).val.toSet =
             curr.val.toSet ∪ t.val.toSet :=
-        NR.glue_sets curr t htouch_t.2 htouch_t.1
+        NR.glue_sets curr t htouch_t
       have htouch_tail' :
-          ∀ u ∈ ts, isTouch (NR.glue curr t) u := by
+          ∀ u ∈ ts, NR.mergeable (NR.glue curr t) u := by
         intro u hu
-        exact touch_after_glue_step curr t u htouch_t (htouch_tail u hu)
+        exact mergeable_after_glue_step curr t u htouch_t (htouch_tail u hu)
       have ih' := ih (NR.glue curr t) htouch_tail'
       simp [glueMany] at ih'
       simp [glueMany, ih', hglue, rangesToSet_cons,
@@ -441,12 +431,12 @@ def buildSplit (curr : NR) (before touching after : List NR) :
 lemma buildSplit_sets
     (curr : NR) {xs before touching after}
     (hx : xs = before ++ touching ++ after)
-    (ht : ∀ t ∈ touching, isTouch curr t) :
+    (ht : ∀ t ∈ touching, NR.mergeable curr t) :
     rangesToSet (buildSplit curr before touching after) =
       curr.val.toSet ∪
         (rangesToSet touching ∪ rangesToSet before ∪ rangesToSet after) := by
   cases hx
-  simp [buildSplit, glueMany_sets_touching curr touching ht,
+  simp [buildSplit, glueMany_sets_mergeable curr touching ht,
     Set.union_left_comm, Set.union_comm]
 
 /-- Everything in `before` is before everything in `touching`. -/
@@ -511,7 +501,7 @@ lemma split_touch_before_after
 lemma buildSplit_pairwise
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs)
-    (htouch : ∀ t ∈ w.touching, isTouch curr t) :
+    (htouch : ∀ t ∈ w.touching, NR.mergeable curr t) :
     List.Pairwise (· ≺ ·)
       (buildSplit curr w.before w.touching w.after) := by
   set g := glueMany curr w.touching with hg
@@ -538,7 +528,7 @@ lemma buildSplit_pairwise
           (curr := curr) (xs := xs) ok w hb ht
     have hb_glue_aux :
         ∀ (acc : NR) (ts : List NR),
-            (∀ t ∈ ts, isTouch acc t) →
+            (∀ t ∈ ts, NR.mergeable acc t) →
             (∀ t ∈ ts, b ≺ t) →
             b ≺ acc →
             b ≺ glueMany acc ts := by
@@ -548,15 +538,15 @@ lemma buildSplit_pairwise
           intro _ _ hb_acc; simpa [glueMany] using hb_acc
       | cons t ts ih =>
           intro htouch_ts hbefore_ts hb_acc
-          have htouch_head : isTouch acc t := htouch_ts t (by simp)
+          have htouch_head : NR.mergeable acc t := htouch_ts t (by simp)
           have hbefore_head : b ≺ t := hbefore_ts t (by simp)
           have hb_glued : b ≺ NR.glue acc t :=
             NR.before_glue hb_acc hbefore_head
           have htouch_tail :
-              ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
+              ∀ u ∈ ts, NR.mergeable (NR.glue acc t) u := by
             intro u hu
-            have htu : isTouch acc u := htouch_ts u (by simp [hu])
-            exact touch_after_glue_step acc t u htouch_head htu
+            have htu : NR.mergeable acc u := htouch_ts u (by simp [hu])
+            exact mergeable_after_glue_step acc t u htouch_head htu
           have hbefore_tail :
               ∀ u ∈ ts, b ≺ u := by
             intro u hu
@@ -579,7 +569,7 @@ lemma buildSplit_pairwise
           (curr := curr) (xs := xs) ok w ht ha
     have h_aux :
         ∀ (acc : NR) (ts : List NR),
-            (∀ t ∈ ts, isTouch acc t) →
+            (∀ t ∈ ts, NR.mergeable acc t) →
             (∀ t ∈ ts, t ≺ a) →
             acc ≺ a →
             glueMany acc ts ≺ a := by
@@ -589,15 +579,15 @@ lemma buildSplit_pairwise
           intro _ _ hacc; simpa [glueMany] using hacc
       | cons t ts ih =>
           intro htouch_ts hbefore_ts hacc
-          have htouch_head : isTouch acc t := htouch_ts t (by simp)
+          have htouch_head : NR.mergeable acc t := htouch_ts t (by simp)
           have ht_before : t ≺ a := hbefore_ts t (by simp)
           have h_glued : NR.glue acc t ≺ a :=
             NR.glue_before hacc ht_before
           have htouch_tail :
-              ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
+              ∀ u ∈ ts, NR.mergeable (NR.glue acc t) u := by
             intro u hu
-            have htu : isTouch acc u := htouch_ts u (by simp [hu])
-            exact touch_after_glue_step acc t u htouch_head htu
+            have htu : NR.mergeable acc u := htouch_ts u (by simp [hu])
+            exact mergeable_after_glue_step acc t u htouch_head htu
           have hbefore_tail :
               ∀ u ∈ ts, u ≺ a := by
             intro u hu

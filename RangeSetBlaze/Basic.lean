@@ -76,8 +76,8 @@ lemma not_before_iff {a b : { r : IntRange // r.lo ≤ r.hi }} :
     ¬ (a.val.hi + 1 < b.val.lo) ↔ b.val.lo ≤ a.val.hi + 1 := by
   exact not_lt
 
-/-- If `a` overlaps/touches `b` (no gap either way), their set is the union. -/
-lemma mergeRange_toSet_of_overlap
+/-- If `a` and `b` have no integer gap either way, their hull is their union. -/
+lemma mergeRange_toSet_of_noGap
     {a : IntRange} {ha : a.lo ≤ a.hi} {b : { r : IntRange // r.lo ≤ r.hi }}
     (h₁ : ¬ (a.hi + 1 < b.val.lo))
     (h₂ : ¬ (b.val.hi + 1 < a.lo)) :
@@ -170,11 +170,42 @@ lemma pairwise_before_prefix_last_suffix
 instance : DecidableRel before :=
   fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
 
-/-- 3-way discriminator: `a` is left of `b`, `b` is left of `a`, or they overlap/touch. -/
+/-- Two nonempty closed integer ranges are mergeable when their union has no
+integer gap: neither range is strictly before the other. -/
+def mergeable (a b : NR) : Prop :=
+  ¬ a ≺ b ∧ ¬ b ≺ a
+
+instance : DecidableRel mergeable :=
+  fun a b => inferInstanceAs (Decidable (¬ a ≺ b ∧ ¬ b ≺ a))
+
+/-- Mergeability is symmetric. -/
+lemma mergeable_comm {a b : NR} : mergeable a b ↔ mergeable b a := by
+  simp only [mergeable, and_comm]
+
+/-- Lower-endpoint preorder: `a` starts no later than `b` (`a.lo ≤ b.lo`). -/
+def startsBefore (a b : NR) : Prop := a.val.lo ≤ b.val.lo
+
+instance : DecidableRel startsBefore :=
+  fun a b => inferInstanceAs (Decidable (a.val.lo ≤ b.val.lo))
+
+/-- For ranges ordered by lower endpoint, the forward no-gap test is enough
+to establish symmetric mergeability. -/
+lemma mergeable_of_startsBefore_of_not_before {a b : NR}
+    (horder : startsBefore a b) (hnot : ¬ a ≺ b) :
+    mergeable a b := by
+  refine ⟨hnot, ?_⟩
+  intro hba
+  unfold startsBefore at horder
+  unfold before at hba
+  have hb := b.property
+  change b.val.lo ≤ b.val.hi at hb
+  linarith
+
+/-- 3-way discriminator: `a` is left of `b`, `b` is left of `a`, or they are mergeable. -/
 inductive Rel3 (a b : NR) : Type where
   | left : (a ≺ b) → Rel3 a b
   | right : (b ≺ a) → Rel3 a b
-  | overlap : (¬ a ≺ b) → (¬ b ≺ a) → Rel3 a b
+  | mergeable : mergeable a b → Rel3 a b
 
 open Classical
 
@@ -186,21 +217,21 @@ def Rel3.classify (a b : NR) : Rel3 a b := by
   ·
     by_cases h₂ : b ≺ a
     · exact Rel3.right h₂
-    · exact Rel3.overlap h₁ h₂
+    · exact Rel3.mergeable ⟨h₁, h₂⟩
 
 /-- Merge two overlapping/touching ranges into a single nonempty range. -/
 def glue (a b : NR) : NR :=
   ⟨IntRange.mergeRange a.val b.val,
     IntRange.mergeRange_nonempty a.property b.property⟩
 
-lemma glue_sets (a b : NR)
-    (h₁ : ¬ a ≺ b) (h₂ : ¬ b ≺ a) :
+lemma glue_sets (a b : NR) (h : mergeable a b) :
     (glue a b).val.toSet = a.val.toSet ∪ b.val.toSet := by
+  rcases h with ⟨h₁, h₂⟩
   have :
       (IntRange.mergeRange a.val b.val).toSet =
         a.val.toSet ∪ b.val.toSet := by
     simpa using
-      (IntRange.mergeRange_toSet_of_overlap
+      (IntRange.mergeRange_toSet_of_noGap
         (a := a.val) (ha := a.property)
         (b := ⟨b.val, b.property⟩)
         (by simpa [before] using h₁)
@@ -224,12 +255,6 @@ lemma glue_before {a b z : NR}
   unfold before glue IntRange.mergeRange at *
   rw [max_add]
   exact max_lt haz hbz
-
-/-- Lower-endpoint preorder: `a` starts no later than `b` (`a.lo ≤ b.lo`). -/
-def startsBefore (a b : NR) : Prop := a.val.lo ≤ b.val.lo
-
-instance : DecidableRel startsBefore :=
-  fun a b => inferInstanceAs (Decidable (a.val.lo ≤ b.val.lo))
 
 end NR
 
@@ -396,10 +421,10 @@ private def insert
                   exact hzxs w (List.mem_cons_of_mem _ hw)
                 exact hmon hz_tail hzc y hy
           ⟨x :: ys, pair, setEq, mono⟩
-      | IntRange.NR.Rel3.overlap h₁ h₂ =>
+      | IntRange.NR.Rel3.mergeable hmergeable =>
           let glued := IntRange.NR.glue curr x
           have gl_sets : glued.val.toSet = curr.val.toSet ∪ x.val.toSet :=
-            IntRange.NR.glue_sets curr x h₁ h₂
+            IntRange.NR.glue_sets curr x hmergeable
           let ⟨ys, hpair, hset, hmon⟩ := insert glued xs h_tail
           let setEq :
               rangesToSet ys = curr.val.toSet ∪ rangesToSet (x :: xs) :=
