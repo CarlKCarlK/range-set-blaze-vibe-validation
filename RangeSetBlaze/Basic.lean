@@ -230,9 +230,38 @@ structure RangeSetBlaze where
 
 namespace RangeSetBlaze
 
-/-- Convert a `RangeSetBlaze` to a set by taking the union of all its ranges. -/
+/-- The set represented by a list of nonempty integer ranges. -/
+def rangesToSet (rs : List NR) : Set Int :=
+  rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
+
+@[simp] lemma rangesToSet_nil :
+    rangesToSet ([] : List NR) = (∅ : Set Int) := rfl
+
+@[simp] lemma rangesToSet_cons (r : NR) (rs : List NR) :
+    rangesToSet (r :: rs) = r.val.toSet ∪ rangesToSet rs := rfl
+
+@[simp] lemma rangesToSet_append (xs ys : List NR) :
+    rangesToSet (xs ++ ys) = rangesToSet xs ∪ rangesToSet ys := by
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+      simp [ih, Set.union_left_comm, Set.union_comm]
+
+/-- Every range occurring in a list is contained in that list's represented set. -/
+lemma rangeToSet_subset_rangesToSet_of_mem
+    {ranges : List NR} {nr : NR} (hmem : nr ∈ ranges) :
+    nr.val.toSet ⊆ rangesToSet ranges := by
+  induction ranges with
+  | nil => simp at hmem
+  | cons x xs ih =>
+      rw [rangesToSet_cons]
+      rcases List.mem_cons.mp hmem with rfl | htail
+      · exact Set.subset_union_left
+      · exact Set.subset_union_of_subset_right (ih htail) _
+
+/-- Convert a `RangeSetBlaze` to the set represented by its range list. -/
 def toSet (L : RangeSetBlaze) : Set Int :=
-  L.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅
+  rangesToSet L.ranges
 
 /-- The `toSet` of an empty `RangeSetBlaze` is empty. -/
 @[simp]
@@ -245,19 +274,9 @@ lemma toSet_cons {r : NR} {rs : List NR}
     {ok : List.Pairwise (· ≺ ·) (r :: rs)} :
     toSet ⟨r :: rs, ok⟩ =
       r.val.toSet ∪ toSet ⟨rs, ok.tail⟩ := rfl
-
-/-- Helper: list view of `RangeSetBlaze.toSet`. -/
-private def listToSet (rs : List NR) : Set Int :=
-  rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅
-
-@[simp] lemma listToSet_nil :
-    listToSet ([] : List NR) = (∅ : Set Int) := rfl
-
-@[simp] lemma listToSet_cons (r : NR) (rs : List NR) :
-    listToSet (r :: rs) = r.val.toSet ∪ listToSet rs := rfl
-
-@[simp] lemma toSet_eq_listToSet (L : RangeSetBlaze) :
-    L.toSet = listToSet L.ranges := rfl
+/-- The record set view is definitionally the set represented by its ranges. -/
+@[simp] lemma toSet_eq_rangesToSet (L : RangeSetBlaze) :
+    L.toSet = rangesToSet L.ranges := rfl
 
 /-- Proof-free insertion by scanning once with Rel3. -/
 lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
@@ -296,14 +315,14 @@ private def insert
   : (xs : List IntRange.NR) → List.Pairwise (· ≺ ·) xs →
       { ys : List IntRange.NR //
         List.Pairwise (· ≺ ·) ys ∧
-        listToSet ys = curr.val.toSet ∪ listToSet xs ∧
+        rangesToSet ys = curr.val.toSet ∪ rangesToSet xs ∧
         ∀ {z : IntRange.NR},
           (∀ y ∈ xs, z ≺ y) → z ≺ curr →
           ∀ y ∈ ys, z ≺ y }
   | [], _ =>
       ⟨[curr], by
           exact List.pairwise_singleton (R := (· ≺ ·)) (a := curr),
-        by simp [listToSet],
+        by simp [rangesToSet],
         by
           intro z _ hzc y hy
           have hy' : y = curr := List.mem_singleton.mp hy
@@ -334,7 +353,7 @@ private def insert
               rcases List.mem_cons.1 hy with hy | hy
               · simpa [hy] using hzc
               · exact hzxs y hy
-          ⟨curr :: x :: xs, pair, by simp [listToSet_cons], mono⟩
+          ⟨curr :: x :: xs, pair, by simp [rangesToSet_cons], mono⟩
       | IntRange.NR.Rel3.right hxc =>
           let ⟨ys, hpair, hset, hmon⟩ := insert curr xs h_tail
           let hx_all : ∀ y ∈ ys, x ≺ y :=
@@ -346,10 +365,10 @@ private def insert
           let pair : List.Pairwise (· ≺ ·) (x :: ys) :=
             List.pairwise_cons.2 ⟨hx_all, hpair⟩
           let setEq :
-              listToSet (x :: ys) = curr.val.toSet ∪ listToSet (x :: xs) :=
+              rangesToSet (x :: ys) = curr.val.toSet ∪ rangesToSet (x :: xs) :=
             by
               have := congrArg (fun s => x.val.toSet ∪ s) hset
-              simpa [listToSet_cons, Set.union_left_comm, Set.union_assoc, Set.union_comm] using this
+              simpa [rangesToSet_cons, Set.union_left_comm, Set.union_assoc, Set.union_comm] using this
           let mono :
               ∀ {z : IntRange.NR},
                 (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
@@ -369,9 +388,9 @@ private def insert
             IntRange.NR.glue_sets curr x h₁ h₂
           let ⟨ys, hpair, hset, hmon⟩ := insert glued xs h_tail
           let setEq :
-              listToSet ys = curr.val.toSet ∪ listToSet (x :: xs) :=
+              rangesToSet ys = curr.val.toSet ∪ rangesToSet (x :: xs) :=
             by
-              simpa [listToSet_cons, gl_sets, Set.union_assoc,
+              simpa [rangesToSet_cons, gl_sets, Set.union_assoc,
                 Set.union_left_comm, Set.union_comm] using hset
           let mono :
               ∀ {z : IntRange.NR},
@@ -412,8 +431,8 @@ lemma insert_pairwise
 private lemma insert_sets_aux
     (curr : IntRange.NR) (xs : List IntRange.NR)
     (ok : List.Pairwise (· ≺ ·) xs) :
-    listToSet (insert curr xs ok).1 =
-      curr.val.toSet ∪ listToSet xs := by
+    rangesToSet (insert curr xs ok).1 =
+      curr.val.toSet ∪ rangesToSet xs := by
   rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
   simpa using hset
 
@@ -421,8 +440,8 @@ private lemma insert_sets_aux
 lemma insert_sets
     (curr : IntRange.NR) (xs : List IntRange.NR)
     (ok : List.Pairwise (· ≺ ·) xs) :
-    listToSet (insertYs curr xs ok) =
-      curr.val.toSet ∪ listToSet xs := by
+    rangesToSet (insertYs curr xs ok) =
+      curr.val.toSet ∪ rangesToSet xs := by
   simpa [insertYs] using insert_sets_aux curr xs ok
 
 private lemma insert_monotone_aux
@@ -469,14 +488,14 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
     have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by
       simp [internalAddA, hNotEmpty, hInsert.symm]
     have hcurr : (⟨r, hr⟩ : IntRange.NR).val.toSet = r.toSet := rfl
-    have htoSet : (internalAddA s r).toSet = listToSet ys := by
-      simp [hstruct, toSet_eq_listToSet]
-    have hsToSet : s.toSet = listToSet s.ranges := by
-      simp [toSet_eq_listToSet]
+    have htoSet : (internalAddA s r).toSet = rangesToSet ys := by
+      simp [hstruct, toSet_eq_rangesToSet]
+    have hsToSet : s.toSet = rangesToSet s.ranges := by
+      simp [toSet_eq_rangesToSet]
     calc
       (internalAddA s r).toSet
-          = listToSet ys := htoSet
-      _ = r.toSet ∪ listToSet s.ranges := by
+          = rangesToSet ys := htoSet
+      _ = r.toSet ∪ rangesToSet s.ranges := by
           simpa [hcurr] using hset
       _ = s.toSet ∪ r.toSet := by
           rw [hsToSet.symm, Set.union_comm]

@@ -1,6 +1,5 @@
 import Mathlib.Data.List.TakeWhile
 import RangeSetBlaze.Basic
-import RangeSetBlaze.AlgoB
 
 namespace RangeSetBlaze
 
@@ -159,42 +158,6 @@ private def internalAdd2NRs (xs : List NR) (start stop : Int)
 open Classical
 open IntRange
 
-
--- Algo C-local list set view. Its duplication of the folds in `Basic` and
--- Algo B is recorded as maintenance debt in the Phase 3 endpoint report.
-section LocalDefs
-
-private def algoCListSet (rs : List NR) : Set Int :=
-  rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
-
-@[simp] private lemma algoCListSet_nil :
-    algoCListSet ([] : List NR) = (∅ : Set Int) := rfl
-
-@[simp] private lemma algoCListSet_cons (r : NR) (rs : List NR) :
-    algoCListSet (r :: rs) = r.val.toSet ∪ algoCListSet rs := rfl
-
-@[simp] private lemma algoCListSet_append (xs ys : List NR) :
-    algoCListSet (xs ++ ys) = algoCListSet xs ∪ algoCListSet ys := by
-  induction xs with
-  | nil => simp
-  | cons x xs ih =>
-      simp [ih, Set.union_left_comm, Set.union_comm]
-
-end LocalDefs
-
-private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
-    nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
-  | [], _, h => by cases h
-  | x :: xs, nr, h => by
-      simp [List.mem_cons] at h
-      rw [algoCListSet_cons]
-      cases h with
-      | inl heq =>
-          subst heq
-          exact Set.subset_union_left
-      | inr htail =>
-          exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_algoCListSet xs nr htail) _
-
 /-- In pairwise gap-separated ranges, every range after the strict-start split
 has lower endpoint at least `start`. -/
 private lemma strict_start_split_suffix_lower_bound
@@ -230,11 +193,11 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
     (List.Pairwise NR.before pending →
       List.Pairwise NR.before (res.fst :: res.snd)) ∧
       (∀ nr ∈ (res.fst :: res.snd), start ≤ nr.val.lo) ∧
-      algoCListSet (res.fst :: res.snd) =
-        current.val.toSet ∪ algoCListSet pending := by
+      rangesToSet (res.fst :: res.snd) =
+        current.val.toSet ∪ rangesToSet pending := by
   induction pending generalizing current with
   | nil =>
-      simp [deleteExtraNRs_loop, algoCListSet_nil, Set.union_comm, hlo]
+      simp [deleteExtraNRs_loop, Set.union_comm, hlo]
   | cons next tail ih =>
       dsimp [deleteExtraNRs_loop]
       by_cases hmerge : next.val.lo ≤ current.val.hi + 1
@@ -278,20 +241,20 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
               start ≤ nr.val.lo := by
           simpa [hstep] using hrec.2.1
         have hsets_out :
-            algoCListSet
+            rangesToSet
                 ((deleteExtraNRs_loop current (next :: tail)).fst ::
                   (deleteExtraNRs_loop current (next :: tail)).snd) =
-              current.val.toSet ∪ algoCListSet (next :: tail) := by
+              current.val.toSet ∪ rangesToSet (next :: tail) := by
           calc
-            algoCListSet
+            rangesToSet
                 ((deleteExtraNRs_loop current (next :: tail)).fst ::
                   (deleteExtraNRs_loop current (next :: tail)).snd)
-                = merged.val.toSet ∪ algoCListSet tail := by
+                = merged.val.toSet ∪ rangesToSet tail := by
                     simpa [hstep] using hrec.2.2
-            _ = (current.val.toSet ∪ next.val.toSet) ∪ algoCListSet tail := by
+            _ = (current.val.toSet ∪ next.val.toSet) ∪ rangesToSet tail := by
                   rw [hmerged_toSet]
-            _ = current.val.toSet ∪ algoCListSet (next :: tail) := by
-                  simp [algoCListSet_cons]; ac_rfl
+            _ = current.val.toSet ∪ rangesToSet (next :: tail) := by
+                  simp [rangesToSet_cons]; ac_rfl
         exact ⟨horder_out, hbound_out, hsets_out⟩
       · have h_loop_eq :
             deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
@@ -332,10 +295,10 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
           · simp [hlo]
           · exact hge nr (by simp [hmem])
         have hsets_out :
-            algoCListSet
+            rangesToSet
                 ((deleteExtraNRs_loop current (next :: tail)).fst ::
                   (deleteExtraNRs_loop current (next :: tail)).snd) =
-              current.val.toSet ∪ algoCListSet (next :: tail) := by
+              current.val.toSet ∪ rangesToSet (next :: tail) := by
           rw [h_loop_eq]
           simp [Set.union_left_comm]
         exact ⟨horder_out, hbound_out, hsets_out⟩
@@ -345,11 +308,11 @@ lemma deleteExtraNRs_loop_sets
     ∀ (pending : List NR) (current : NR),
       current.val.lo = start →
       (∀ nr ∈ pending, start ≤ nr.val.lo) →
-      algoCListSet
+      rangesToSet
           (let res := deleteExtraNRs_loop current pending;
             res.fst :: res.snd)
         =
-          current.val.toSet ∪ algoCListSet pending := by
+          current.val.toSet ∪ rangesToSet pending := by
   intro pending current hlo hge
   exact (deleteExtraNRs_loop_preserves_order_lower_bound_and_union
     start current pending hlo hge).2.2
@@ -387,8 +350,8 @@ private lemma internalAdd2NRs_preserves_order_and_union
             let before := split.fst
             before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start) :
     List.Pairwise NR.before (internalAdd2NRs xs start stop h_le) ∧
-      algoCListSet (internalAdd2NRs xs start stop h_le) =
-        algoCListSet xs ∪ (mkNR start stop h_le).val.toSet := by
+      rangesToSet (internalAdd2NRs xs start stop h_le) =
+        rangesToSet xs ∪ (mkNR start stop h_le).val.toSet := by
   -- Both guarantees use the same strict-start split.
   set p : NR → Bool := (fun nr => decide (nr.val.lo < start)) with hp
   set split := List.span p xs
@@ -500,12 +463,12 @@ private lemma internalAdd2NRs_preserves_order_and_union
     simp [initial, curr, inserted, mkNR, IntRange.toSet, h_initial_hi]
 
   have hsets :
-      algoCListSet (internalAdd2NRs xs start stop h_le) =
-        algoCListSet xs ∪ inserted.val.toSet := by
-    rw [h_output, algoCListSet_append]
+      rangesToSet (internalAdd2NRs xs start stop h_le) =
+        rangesToSet xs ∪ inserted.val.toSet := by
+    rw [h_output, rangesToSet_append]
     rw [h_loop_props.2.2]
     rw [h_initial_set]
-    rw [h_xs_eq, algoCListSet_append]
+    rw [h_xs_eq, rangesToSet_append]
     ac_rfl
 
   exact ⟨horder, by simpa [inserted] using hsets⟩
@@ -637,7 +600,7 @@ private lemma extend_predecessor_preserves_order_and_union
     let res := deleteExtraNRs_loop extended after
     let newRanges := init ++ res.fst :: res.snd
     List.Pairwise NR.before newRanges ∧
-      algoCListSet newRanges = s.toSet ∪
+      rangesToSet newRanges = s.toSet ∪
         (mkNR start stop (by
           omega)).val.toSet := by
   intro init extendedHi extended res newRanges
@@ -725,25 +688,25 @@ private lemma extend_predecessor_preserves_order_and_union
       simpa [inserted, mkNR] using hNoGap
     simpa [extended, extendedHi, inserted, mkNR] using
       (merge_step_sets prev inserted horder htouch).symm
-  have h_s_toSet : s.toSet = algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after := by
-    have h_s_ranges : s.toSet = algoCListSet s.ranges := by
+  have h_s_toSet : s.toSet = rangesToSet init ∪ prev.val.toSet ∪ rangesToSet after := by
+    have h_s_ranges : s.toSet = rangesToSet s.ranges := by
       unfold RangeSetBlaze.toSet
       rfl
     rw [h_s_ranges, h_s_decomp, h_before_decomp]
-    rw [algoCListSet_append, algoCListSet_append]
-    simp only [algoCListSet_cons, algoCListSet_nil, Set.union_empty]
+    rw [rangesToSet_append, rangesToSet_append]
+    simp only [rangesToSet_cons, rangesToSet_nil, Set.union_empty]
   constructor
   · exact hpw_newRanges
   · calc
-      algoCListSet newRanges
-        = algoCListSet (init ++ res.fst :: res.snd) := rfl
-      _ = algoCListSet init ∪ algoCListSet (res.fst :: res.snd) :=
-        algoCListSet_append init (res.fst :: res.snd)
-      _ = algoCListSet init ∪ (extended.val.toSet ∪ algoCListSet after) := by
+      rangesToSet newRanges
+        = rangesToSet (init ++ res.fst :: res.snd) := rfl
+      _ = rangesToSet init ∪ rangesToSet (res.fst :: res.snd) :=
+        rangesToSet_append init (res.fst :: res.snd)
+      _ = rangesToSet init ∪ (extended.val.toSet ∪ rangesToSet after) := by
         rw [h_loop_props.2.2]
-      _ = algoCListSet init ∪ ((prev.val.toSet ∪ inserted.val.toSet) ∪ algoCListSet after) := by
+      _ = rangesToSet init ∪ ((prev.val.toSet ∪ inserted.val.toSet) ∪ rangesToSet after) := by
         rw [h_extended_toSet]
-      _ = (algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after) ∪ inserted.val.toSet := by
+      _ = (rangesToSet init ∪ prev.val.toSet ∪ rangesToSet after) ∪ inserted.val.toSet := by
         ac_rfl
       _ = s.toSet ∪ inserted.val.toSet := by rw [h_s_toSet]
 
@@ -827,10 +790,6 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
             have hExtend : prev.val.hi < stop := not_le.mp _hextend
             internalAddC_extendPrev_safe s r start stop before after prev hDecomp h_last hNoGap hExtend
 
--- Bridge lemma: algoCListSet here matches the foldr pattern used in Basic.lean's listToSet
-private lemma algoCListSet_eq_foldr (rs : List NR) :
-    algoCListSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
-
 /-- Safe insertion: set-level correctness. -/
 theorem internalAdd2_safe_toSet
     (s : RangeSetBlaze) (r : IntRange)
@@ -841,8 +800,7 @@ theorem internalAdd2_safe_toSet
   (internalAdd2_safe s r hgap_lt).toSet = s.toSet ∪ r.toSet := by
   by_cases hempty : r.hi < r.lo
   · simp [internalAdd2_safe, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
-  · simpa [internalAdd2_safe, hempty, fromNRs, RangeSetBlaze.toSet,
-      algoCListSet_eq_foldr, mkNR] using
+  · simpa [internalAdd2_safe, hempty, fromNRs, RangeSetBlaze.toSet, mkNR] using
       (internalAdd2NRs_preserves_order_and_union
         s.ranges r.lo r.hi (not_lt.mp hempty) s.ok hgap_lt).2
 
@@ -880,7 +838,7 @@ theorem internalAddC_extendPrev_safe_toSet
     simp [mkNR, IntRange.toSet, hStartEq, hStopEq]
   unfold internalAddC_extendPrev_safe
   simp only [fromNRs, RangeSetBlaze.toSet]
-  change algoCListSet _ = s.toSet ∪ r.toSet
+  change rangesToSet _ = s.toSet ∪ r.toSet
   simpa [h_interval] using hspec.2
 
 /-- Algo C represents exactly the union of the old range set and the input
@@ -920,8 +878,8 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             simp [IntRange.toSet] at hx ⊢
             exact ⟨h_prev_props.1.trans hx.1, hx.2.trans h_covered⟩
           have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
-            simpa [RangeSetBlaze.toSet, algoCListSet_eq_foldr] using
-              nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_props.2
+            simpa [RangeSetBlaze.toSet] using
+              rangeToSet_subset_rangesToSet_of_mem h_prev_props.2
           have h_r_covered := Set.Subset.trans h_r_subset_prev h_prev_in_s
           show s.toSet = s.toSet ∪ r.toSet
           rw [Set.union_eq_self_of_subset_right h_r_covered]

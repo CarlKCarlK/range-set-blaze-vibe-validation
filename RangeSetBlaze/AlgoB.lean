@@ -431,18 +431,6 @@ def splitRanges (curr : NR) (xs : List NR)
 def glueMany (curr : NR) (ts : List NR) : NR :=
   ts.foldl (fun acc t => NR.glue acc t) curr
 
-/-- Set view of a list of ranges. -/
-def listSet (rs : List NR) : Set Int :=
-  rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
-
-@[simp] lemma listSet_nil : listSet ([] : List NR) = (∅ : Set Int) := rfl
-
-@[simp] lemma listSet_cons (r : NR) (rs : List NR) :
-    listSet (r :: rs) = r.val.toSet ∪ listSet rs := rfl
-
-@[simp] lemma toSet_eq_listSet (s : RangeSetBlaze) :
-    s.toSet = listSet s.ranges := rfl
-
 lemma touch_after_glue_step
     (curr x y : NR)
     (hx : isTouch curr x)
@@ -470,7 +458,7 @@ lemma glueMany_sets_touching
     (curr : NR) (ts : List NR)
     (htouch : ∀ t ∈ ts, isTouch curr t) :
     (glueMany curr ts).val.toSet =
-      curr.val.toSet ∪ listSet ts := by
+      curr.val.toSet ∪ rangesToSet ts := by
   induction ts generalizing curr with
   | nil =>
       simp [glueMany]
@@ -488,16 +476,7 @@ lemma glueMany_sets_touching
         exact touch_after_glue_step curr t u htouch_t (htouch_tail u hu)
       have ih' := ih (NR.glue curr t) htouch_tail'
       simp [glueMany] at ih'
-      simp [glueMany, ih', hglue, listSet_cons,
-        Set.union_left_comm, Set.union_comm]
-
-@[simp] lemma listSet_append (xs ys : List NR) :
-    listSet (xs ++ ys) = listSet xs ∪ listSet ys := by
-  induction xs with
-  | nil =>
-      simp
-  | cons x xs ih =>
-      simp [listSet_cons, List.cons_append, ih,
+      simp [glueMany, ih', hglue, rangesToSet_cons,
         Set.union_left_comm, Set.union_comm]
 
 /-- Rebuild the list by gluing the touching block. -/
@@ -509,9 +488,9 @@ lemma buildSplit_sets
     (curr : NR) {xs before touching after}
     (hx : xs = before ++ touching ++ after)
     (ht : ∀ t ∈ touching, isTouch curr t) :
-    listSet (buildSplit curr before touching after) =
+    rangesToSet (buildSplit curr before touching after) =
       curr.val.toSet ∪
-        (listSet touching ∪ listSet before ∪ listSet after) := by
+        (rangesToSet touching ∪ rangesToSet before ∪ rangesToSet after) := by
   cases hx
   simp [buildSplit, glueMany_sets_touching curr touching ht,
     Set.union_left_comm, Set.union_comm]
@@ -759,9 +738,9 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     set curr : NR := ⟨r, hr⟩
     set w := splitRanges curr s.ranges s.ok
     have hbuild :
-        listSet (buildSplit curr w.before w.touching w.after) =
+        rangesToSet (buildSplit curr w.before w.touching w.after) =
           curr.val.toSet ∪
-            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) :=
+            (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) :=
       buildSplit_sets
           (curr := curr) (xs := s.ranges)
           (before := w.before) (touching := w.touching) (after := w.after)
@@ -770,28 +749,27 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
             intro t ht
             exact w.touch_ok ht)
     have hsplit :
-        listSet s.ranges =
-          listSet w.before ∪ listSet w.touching ∪ listSet w.after := by
-      simp [w.order, listSet_append, Set.union_assoc]
+        rangesToSet s.ranges =
+          rangesToSet w.before ∪ rangesToSet w.touching ∪ rangesToSet w.after := by
+      simp [w.order, rangesToSet_append, Set.union_assoc]
     have hcurr : curr.val.toSet = r.toSet := rfl
-    have hs : s.toSet = listSet s.ranges := toSet_eq_listSet s
+    have hs : s.toSet = rangesToSet s.ranges := toSet_eq_rangesToSet s
     have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
     have htoSet :
         (internalAddB s r).toSet =
           curr.val.toSet ∪
-            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
-      simp [internalAddB, hne, curr, w, toSet_eq_listSet, hbuild,
-        -RangeSetBlaze.toSet_eq_listToSet]
+            (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
+      simp [internalAddB, hne, curr, w, toSet_eq_rangesToSet, hbuild]
     calc
       (internalAddB s r).toSet
           = curr.val.toSet ∪
-              (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := htoSet
-      _ = r.toSet ∪ (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
+              (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := htoSet
+      _ = r.toSet ∪ (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
           simp [hcurr]
-      _ = r.toSet ∪ listSet s.ranges := by
+      _ = r.toSet ∪ rangesToSet s.ranges := by
           simp [Set.union_left_comm, Set.union_comm, hsplit]
       _ = r.toSet ∪ s.toSet := by
-          simp [hs.symm]
+          rw [hs.symm]
       _ = s.toSet ∪ r.toSet := by
           simp [Set.union_comm]
   · -- Empty range: adding it changes nothing.
@@ -801,8 +779,7 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
       IntRange.toSet_eq_empty_of_hi_lt_lo hEmpty
     have hToSet :
         (internalAddB s r).toSet = s.toSet := by
-      simp [internalAddB, hEmpty, toSet_eq_listSet,
-        -RangeSetBlaze.toSet_eq_listToSet]
+      simp [internalAddB, hEmpty, toSet_eq_rangesToSet]
     calc
       (internalAddB s r).toSet
           = s.toSet := hToSet
@@ -819,20 +796,20 @@ lemma internalAddB_agrees_with_split_sets
     (s : RangeSetBlaze) (r : IntRange) (hr : r.nonempty) :
     let curr : NR := ⟨r, hr⟩
     let w := splitRanges curr s.ranges s.ok
-    listSet (buildSplit curr w.before w.touching w.after) =
+    rangesToSet (buildSplit curr w.before w.touching w.after) =
       (internalAddB s r).toSet := by
   set curr : NR := ⟨r, hr⟩
   let w := splitRanges curr s.ranges s.ok
   have hsplit :
-      listSet s.ranges =
-        listSet w.before ∪ listSet w.touching ∪ listSet w.after := by
-    simp [w.order, listSet_append, Set.union_assoc]
+      rangesToSet s.ranges =
+        rangesToSet w.before ∪ rangesToSet w.touching ∪ rangesToSet w.after := by
+    simp [w.order, rangesToSet_append, Set.union_assoc]
   have hcurr : curr.val.toSet = r.toSet := rfl
-  have hs : s.toSet = listSet s.ranges := toSet_eq_listSet s
+  have hs : s.toSet = rangesToSet s.ranges := toSet_eq_rangesToSet s
   have hbuild :
-      listSet (buildSplit curr w.before w.touching w.after) =
+      rangesToSet (buildSplit curr w.before w.touching w.after) =
         curr.val.toSet ∪
-          (listSet w.touching ∪ listSet w.before ∪ listSet w.after) :=
+          (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) :=
     buildSplit_sets (curr := curr) (xs := s.ranges)
       (before := w.before) (touching := w.touching) (after := w.after)
       w.order
@@ -843,14 +820,13 @@ lemma internalAddB_agrees_with_split_sets
   have htoSet :
       (internalAddB s r).toSet =
         curr.val.toSet ∪
-          (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
-    simp [internalAddB, hne, curr, w, toSet_eq_listSet, hbuild,
-      -RangeSetBlaze.toSet_eq_listToSet]
+          (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
+    simp [internalAddB, hne, curr, w, toSet_eq_rangesToSet, hbuild]
   calc
-    listSet (buildSplit curr w.before w.touching w.after)
+    rangesToSet (buildSplit curr w.before w.touching w.after)
         = curr.val.toSet ∪
-            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := hbuild
-    _ = listSet s.ranges ∪ r.toSet := by
+            (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := hbuild
+    _ = rangesToSet s.ranges ∪ r.toSet := by
         simp [hcurr, hsplit, Set.union_comm]
     _ = s.toSet ∪ r.toSet := by
         rw [hs]
