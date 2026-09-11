@@ -7,49 +7,26 @@ open IntRange.NR
 open scoped IntRange.NR
 
 /-!
-# Algo D: insertion through an abstract cursor gap
+# Algo D: proved insertion through an abstract cursor gap
 
-Algo D models the proposed Rust insertion based on the experimental
-`BTreeMap` cursor API.  It intentionally models neither B-tree nodes nor the
-cursor implementation.  A cursor is represented by `CursorGap`, a split of
-the canonical range list:
+Algo D is a fully proved executable model of the cursor-shaped Rust insertion
+algorithm.  It represents the cursor by `CursorGap`, a split of the canonical
+range list:
 
 ```text
 left ranges | right ranges
             ^ cursor
 ```
 
-`lowerBoundGap start` performs the model's one search.  It puts ranges whose
-lower endpoint is strictly below `start` on the left and ranges beginning at
-or after `start` on the right.  Thus `left.getLast?` models `peek_prev`, the
-head of `right` models `peek_next`, dropping that head models `remove_next`,
-and appending immediately before `right` models `insert_before`.
+`lowerBoundGap` models the one lower-bound search; the two list sides model
+`peek_prev`, `peek_next`, `remove_next`, and `insert_before`.  The proof covers
+both canonical normalized output ranges and exact `toSet` union semantics.
 
-The executable definition retains the Rust control-flow shape: reject an
-empty input; inspect at most one predecessor; return when that predecessor
-contains the input; otherwise reuse and extend it; separately check whether a
-range at exactly the input start contains the input; scan the right side once;
-and insert a fresh accumulator only on the path that did not reuse the
-predecessor.
-
-In Rust, when the predecessor is reused, its endpoint is mutated before the
-successor scan and possibly again afterward.  Algo D models the same operation
-functionally: it carries that range as the scan accumulator and writes the
-final range during reconstruction.  The successor decisions and resulting
-normalized ranges are identical.
-
-The central proof theorem says that the forward scan preserves canonical
-ordering, its lower-bound fact, and the exact represented union in one
-induction.  The lower-bound split and both containment branches are proved as
-well; the remaining obligations reconstruct the two cursor branches and
-follow the executable dispatcher.  All executable definitions are complete.
-
-For a production `BTreeMap` with `r` stored ranges and `k` absorbed ranges,
-the intended cost is `O(log r + k)`: one lower-bound search, one predecessor
-inspection, and one forward cursor walk with one visit per removed range.
-This Lean list model specifies that access pattern but does not formally model
-complexity.  It also intentionally omits Rust's cached cardinality field.  The
-only correctness targets here are canonical ranges and exact `toSet` union.
+Rust mutates a reused predecessor incrementally.  Lean intentionally carries
+that range as a functional accumulator and reconstructs it once after the
+scan.  Cached `len` is outside the model.  Production complexity is intended
+to be `O(log r + k)` for `r` stored and `k` absorbed ranges, but complexity is
+not formally proved.
 -/
 
 /-- The smallest useful model of a mutable map cursor: a gap between two list
@@ -571,8 +548,9 @@ theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
 
 /-! ## Small executable regression examples
 
-These examples compare Algo D's concrete range lists with Algo C.  Together
-they cover the twelve control-flow situations listed in the v0 brief.
+The first examples assert concrete results without relying on Algo C.  The
+remaining examples compare Algo D's concrete range lists with Algo C across
+twelve control-flow situations.
 -/
 
 private def testNR (lo hi : Int) (h : lo ≤ hi := by omega) : NR :=
@@ -584,6 +562,18 @@ private def testSet (ranges : List NR)
 
 private def sameAsC (s : RangeSetBlaze) (r : IntRange) : Bool :=
   (internalAddD s r).ranges == (internalAddC s r).ranges
+
+example : (internalAddD (testSet [testNR 10 30]) { lo := 10, hi := 20 }).ranges =
+    [testNR 10 30] := by native_decide
+example : (internalAddD (testSet [testNR 10 15]) { lo := 10, hi := 20 }).ranges =
+    [testNR 10 20] := by native_decide
+example : (internalAddD (testSet [testNR 1 5, testNR 10 15]) { lo := 4, hi := 11 }).ranges =
+    [testNR 1 15] := by native_decide
+example : (internalAddD
+    (testSet [testNR 10 12, testNR 16 18, testNR 22 25])
+    { lo := 11, hi := 23 }).ranges = [testNR 10 25] := by native_decide
+example : (internalAddD (testSet [testNR 10 12, testNR 20 22])
+    { lo := 11, hi := 15 }).ranges = [testNR 10 15, testNR 20 22] := by native_decide
 
 example : sameAsC (testSet [testNR 10 12]) { lo := 5, hi := 4 } := by native_decide
 example : sameAsC (testSet []) { lo := 5, hi := 7 } := by native_decide
