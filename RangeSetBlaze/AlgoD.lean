@@ -32,11 +32,17 @@ range at exactly the input start contains the input; scan the right side once;
 and insert a fresh accumulator only on the path that did not reuse the
 predecessor.
 
-The central proof obligation says that the forward scan preserves canonical
+In Rust, when the predecessor is reused, its endpoint is mutated before the
+successor scan and possibly again afterward.  Algo D models the same operation
+functionally: it carries that range as the scan accumulator and writes the
+final range during reconstruction.  The successor decisions and resulting
+normalized ranges are identical.
+
+The central proof theorem says that the forward scan preserves canonical
 ordering, its lower-bound fact, and the exact represented union in one
-induction.  The remaining theorems record the split, containment, and two
-reconstruction branches.  Their proofs are deliberately left for a later
-version; all executable definitions are complete.
+induction.  The lower-bound split and both containment branches are proved as
+well; the remaining obligations reconstruct the two cursor branches and
+follow the executable dispatcher.  All executable definitions are complete.
 
 For a production `BTreeMap` with `r` stored ranges and `k` absorbed ranges,
 the intended cost is `O(log r + k)`: one lower-bound search, one predecessor
@@ -132,9 +138,8 @@ private def internalAddDNRs (ranges : List NR) (input : NR) : List NR :=
 
 /-! ## Proof architecture
 
-The seven declarations below are the v0 proof plan.  In particular, ordering,
-boundary information, and set semantics for `absorbSuccessors` deliberately
-share one theorem and therefore one future induction.
+Ordering, boundary information, and set semantics for `absorbSuccessors`
+deliberately share one theorem and therefore one induction.
 -/
 
 /-- A lower-bound gap reconstructs the source, and its two sides satisfy the
@@ -146,7 +151,28 @@ private theorem lowerBoundGap_spec
     ranges = gap.left ++ gap.right ∧
       (∀ nr ∈ gap.left, nr.val.lo < start) ∧
       (∀ nr ∈ gap.right, start ≤ nr.val.lo) := by
-  sorry
+  dsimp [lowerBoundGap]
+  rw [List.span_eq_takeWhile_dropWhile]
+  change ranges = List.takeWhile _ ranges ++ List.dropWhile _ ranges ∧
+    (∀ nr ∈ List.takeWhile _ ranges, nr.val.lo < start) ∧
+    (∀ nr ∈ List.dropWhile _ ranges, start ≤ nr.val.lo)
+  refine ⟨List.takeWhile_append_dropWhile.symm, ?_, ?_⟩
+  · intro nr hmem
+    have hsatisfies := List.mem_takeWhile_imp hmem
+    simpa using hsatisfies
+  · induction ranges with
+    | nil => simp
+    | cons first rest ih =>
+        by_cases hfirst : first.val.lo < start
+        · rw [List.dropWhile_cons_of_pos (by simp [hfirst])]
+          exact ih hpw.tail
+        · rw [List.dropWhile_cons_of_neg (by simp [hfirst])]
+          intro nr hmem
+          rw [List.mem_cons] at hmem
+          rcases hmem with rfl | hmem
+          · exact not_lt.mp hfirst
+          · exact le_trans (not_lt.mp hfirst)
+              (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
 
 /-- The forward cursor walk preserves canonical order, the accumulator's
 lower-bound interface, and the exact union in one semantic contract. -/
@@ -160,7 +186,51 @@ private theorem absorbSuccessors_preserves_order_lower_bound_and_union
       (∀ nr ∈ result.fst :: result.snd, start ≤ nr.val.lo) ∧
       rangesToSet (result.fst :: result.snd) =
         current.val.toSet ∪ rangesToSet right := by
-  sorry
+  induction right generalizing current with
+  | nil => simp [absorbSuccessors, hcurrent]
+  | cons next tail ih =>
+      by_cases hmerge : NR.mergeable current next
+      · have hnext : start ≤ next.val.lo := hlower next (by simp)
+        have horder : current.val.lo ≤ next.val.lo := by
+          rw [hcurrent]
+          exact hnext
+        have hglueStart : (NR.glue current next).val.lo = start := by
+          change min current.val.lo next.val.lo = start
+          rw [min_eq_left horder, hcurrent]
+        have htailLower : ∀ nr ∈ tail, start ≤ nr.val.lo := by
+          intro nr hmem
+          exact hlower nr (by simp [hmem])
+        have hrec := ih (NR.glue current next) hglueStart hright.tail htailLower
+        simpa [absorbSuccessors, hmerge, NR.glue_sets current next hmerge,
+          Set.union_assoc] using hrec
+      · have hnext : start ≤ next.val.lo := hlower next (by simp)
+        have hcurrentBefore : current ≺ next := by
+          by_contra hnotBefore
+          exact hmerge (NR.mergeable_of_startsBefore_of_not_before
+            (show current.val.lo ≤ next.val.lo by rw [hcurrent]; exact hnext)
+            hnotBefore)
+        have hcurrentBeforeTail : ∀ nr ∈ tail, current ≺ nr := by
+          intro nr hmem
+          exact before_trans hcurrentBefore
+            (List.rel_of_pairwise_cons hright hmem)
+        have hresult : absorbSuccessors current (next :: tail) =
+            (current, next :: tail) := by
+          simp [absorbSuccessors, hmerge]
+        rw [hresult]
+        dsimp only [Prod.fst, Prod.snd]
+        refine ⟨?_, ?_, rfl⟩
+        · apply List.pairwise_cons.mpr
+          refine ⟨?_, hright⟩
+          intro nr hmem
+          simp only [List.mem_cons] at hmem
+          rcases hmem with heq | hmem
+          · exact heq ▸ hcurrentBefore
+          · exact hcurrentBeforeTail nr hmem
+        · intro nr hmem
+          simp only [List.mem_cons] at hmem
+          rcases hmem with heq | hmem
+          · exact heq ▸ hcurrent.ge
+          · exact hlower nr (by simpa using hmem)
 
 /-- If the predecessor contains the input, adding the input changes neither
 the represented set nor the already-canonical list. -/
@@ -170,7 +240,13 @@ private theorem predecessor_containment_preserves_union
     (hstart : predecessor.val.lo ≤ input.val.lo)
     (hend : input.val.hi ≤ predecessor.val.hi) :
     rangesToSet ranges = rangesToSet ranges ∪ input.val.toSet := by
-  sorry
+  symm
+  apply Set.union_eq_left.mpr
+  refine Set.Subset.trans ?_
+    (rangeToSet_subset_rangesToSet_of_mem hmem)
+  intro x hx
+  rw [IntRange.mem_toSet_iff] at hx ⊢
+  exact ⟨le_trans hstart hx.1, le_trans hx.2 hend⟩
 
 /-- A containing range with exactly the input start lives on the right of the
 strict lower-bound gap and likewise makes insertion a semantic no-op. -/
@@ -180,7 +256,13 @@ private theorem exactStart_successor_containment_preserves_union
     (hstart : successor.val.lo = input.val.lo)
     (hend : input.val.hi ≤ successor.val.hi) :
     rangesToSet ranges = rangesToSet ranges ∪ input.val.toSet := by
-  sorry
+  symm
+  apply Set.union_eq_left.mpr
+  refine Set.Subset.trans ?_
+    (rangeToSet_subset_rangesToSet_of_mem hmem)
+  intro x hx
+  rw [IntRange.mem_toSet_iff] at hx ⊢
+  exact ⟨hstart ▸ hx.1, le_trans hx.2 hend⟩
 
 /-- Reusing a mergeable predecessor, replacing it by its glue with the input,
 and absorbing the right prefix preserves both canonical form and exact union. -/
