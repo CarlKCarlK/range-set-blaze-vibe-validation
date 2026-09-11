@@ -376,28 +376,6 @@ def splitRanges (curr : NR) (xs : List NR)
 def glueMany (curr : NR) (ts : List NR) : NR :=
   ts.foldl (fun acc t => NR.glue acc t) curr
 
-lemma mergeable_after_glue_step
-    (curr x y : NR)
-    (hx : NR.mergeable curr x)
-    (hy : NR.mergeable curr y) :
-    NR.mergeable (NR.glue curr x) y := by
-  rcases hx with ⟨hx₁, hx₂⟩
-  rcases hy with ⟨hy₁, hy₂⟩
-  constructor
-  · intro h
-    unfold NR.glue IntRange.mergeRange NR.before at h
-    have hmax :
-        curr.val.hi + 1 ≤ (max curr.val.hi x.val.hi) + 1 := by
-      have h := add_le_add_right (le_max_left curr.val.hi x.val.hi) (1 : Int)
-      simpa using h
-    have : curr.val.hi + 1 < y.val.lo := lt_of_le_of_lt hmax h
-    exact hy₁ this
-  · intro h
-    unfold NR.glue IntRange.mergeRange NR.before at h
-    have : y.val.hi + 1 < curr.val.lo :=
-      lt_of_lt_of_le h (min_le_left _ _)
-    exact hy₂ this
-
 lemma glueMany_sets_mergeable
     (curr : NR) (ts : List NR)
     (htouch : ∀ t ∈ ts, NR.mergeable curr t) :
@@ -417,7 +395,7 @@ lemma glueMany_sets_mergeable
       have htouch_tail' :
           ∀ u ∈ ts, NR.mergeable (NR.glue curr t) u := by
         intro u hu
-        exact mergeable_after_glue_step curr t u htouch_t (htouch_tail u hu)
+        exact NR.mergeable_glue_left (htouch_tail u hu)
       have ih' := ih (NR.glue curr t) htouch_tail'
       simp [glueMany] at ih'
       simp [glueMany, ih', hglue, rangesToSet_cons,
@@ -500,8 +478,7 @@ lemma split_touch_before_after
 `before ++ [glueMany curr touching] ++ after` is pairwise `(· ≺ ·)`. -/
 lemma buildSplit_pairwise
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
-    (w : SplitWitness curr xs)
-    (htouch : ∀ t ∈ w.touching, NR.mergeable curr t) :
+    (w : SplitWitness curr xs) :
     List.Pairwise (· ≺ ·)
       (buildSplit curr w.before w.touching w.after) := by
   set g := glueMany curr w.touching with hg
@@ -528,34 +505,27 @@ lemma buildSplit_pairwise
           (curr := curr) (xs := xs) ok w hb ht
     have hb_glue_aux :
         ∀ (acc : NR) (ts : List NR),
-            (∀ t ∈ ts, NR.mergeable acc t) →
             (∀ t ∈ ts, b ≺ t) →
             b ≺ acc →
             b ≺ glueMany acc ts := by
       intro acc ts
       induction ts generalizing acc with
       | nil =>
-          intro _ _ hb_acc; simpa [glueMany] using hb_acc
+          intro _ hb_acc; simpa [glueMany] using hb_acc
       | cons t ts ih =>
-          intro htouch_ts hbefore_ts hb_acc
-          have htouch_head : NR.mergeable acc t := htouch_ts t (by simp)
+          intro hbefore_ts hb_acc
           have hbefore_head : b ≺ t := hbefore_ts t (by simp)
           have hb_glued : b ≺ NR.glue acc t :=
             NR.before_glue hb_acc hbefore_head
-          have htouch_tail :
-              ∀ u ∈ ts, NR.mergeable (NR.glue acc t) u := by
-            intro u hu
-            have htu : NR.mergeable acc u := htouch_ts u (by simp [hu])
-            exact mergeable_after_glue_step acc t u htouch_head htu
           have hbefore_tail :
               ∀ u ∈ ts, b ≺ u := by
             intro u hu
             exact hbefore_ts u (by simp [hu])
           have hb_tail :=
-            ih (NR.glue acc t) htouch_tail hbefore_tail hb_glued
+            ih (NR.glue acc t) hbefore_tail hb_glued
           simpa [glueMany] using hb_tail
     have hb_before_glue :=
-      hb_glue_aux curr w.touching htouch hb_touch hb_curr
+      hb_glue_aux curr w.touching hb_touch hb_curr
     simpa [hg] using hb_before_glue
   have h_glue_after :
       ∀ a ∈ w.after, g ≺ a := by
@@ -569,35 +539,28 @@ lemma buildSplit_pairwise
           (curr := curr) (xs := xs) ok w ht ha
     have h_aux :
         ∀ (acc : NR) (ts : List NR),
-            (∀ t ∈ ts, NR.mergeable acc t) →
             (∀ t ∈ ts, t ≺ a) →
             acc ≺ a →
             glueMany acc ts ≺ a := by
       intro acc ts
       induction ts generalizing acc with
       | nil =>
-          intro _ _ hacc; simpa [glueMany] using hacc
+          intro _ hacc; simpa [glueMany] using hacc
       | cons t ts ih =>
-          intro htouch_ts hbefore_ts hacc
-          have htouch_head : NR.mergeable acc t := htouch_ts t (by simp)
+          intro hbefore_ts hacc
           have ht_before : t ≺ a := hbefore_ts t (by simp)
           have h_glued : NR.glue acc t ≺ a :=
             NR.glue_before hacc ht_before
-          have htouch_tail :
-              ∀ u ∈ ts, NR.mergeable (NR.glue acc t) u := by
-            intro u hu
-            have htu : NR.mergeable acc u := htouch_ts u (by simp [hu])
-            exact mergeable_after_glue_step acc t u htouch_head htu
           have hbefore_tail :
               ∀ u ∈ ts, u ≺ a := by
             intro u hu
             exact hbefore_ts u (by simp [hu])
           have ih_result :=
-            ih (NR.glue acc t) htouch_tail hbefore_tail h_glued
+            ih (NR.glue acc t) hbefore_tail h_glued
           have ih_result' := ih_result
           simp [glueMany] at ih_result'
           exact ih_result'
-    have h_glue := h_aux curr w.touching htouch htouch_to_a hcurr_after
+    have h_glue := h_aux curr w.touching htouch_to_a hcurr_after
     simpa [hg] using h_glue
   have pair_before_glue :
       List.Pairwise (· ≺ ·) (w.before ++ [g]) :=
@@ -634,10 +597,7 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
           (curr := curr)
           (xs := s.ranges)
           (ok := s.ok)
-          (w := w)
-          (by
-            intro t ht
-            exact w.touch_ok ht) }
+          (w := w) }
   else
     s
 

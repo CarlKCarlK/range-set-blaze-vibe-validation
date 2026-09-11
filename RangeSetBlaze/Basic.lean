@@ -224,6 +224,30 @@ def glue (a b : NR) : NR :=
   ⟨IntRange.mergeRange a.val b.val,
     IntRange.mergeRange_nonempty a.property b.property⟩
 
+/-- Gluing onto `a` preserves mergeability with any range already mergeable with `a`. -/
+lemma mergeable_glue_left {a b c : NR} (h : mergeable a c) :
+    mergeable (glue a b) c := by
+  rcases h with ⟨hac, hca⟩
+  constructor
+  · intro hgap
+    apply hac
+    unfold glue IntRange.mergeRange before at hgap
+    change max a.val.hi b.val.hi + 1 < c.val.lo at hgap
+    change a.val.hi + 1 < c.val.lo
+    have hmax : a.val.hi + 1 ≤ max a.val.hi b.val.hi + 1 := by
+      calc
+        a.val.hi + 1 = 1 + a.val.hi := add_comm _ _
+        _ ≤ 1 + max a.val.hi b.val.hi :=
+          add_le_add_right (le_max_left _ _) _
+        _ = max a.val.hi b.val.hi + 1 := add_comm _ _
+    exact lt_of_le_of_lt hmax hgap
+  · intro hgap
+    apply hca
+    unfold glue IntRange.mergeRange before at hgap
+    change c.val.hi + 1 < min a.val.lo b.val.lo at hgap
+    change c.val.hi + 1 < a.val.lo
+    exact lt_of_lt_of_le hgap (min_le_left _ _)
+
 lemma glue_sets (a b : NR) (h : mergeable a b) :
     (glue a b).val.toSet = a.val.toSet ∪ b.val.toSet := by
   rcases h with ⟨h₁, h₂⟩
