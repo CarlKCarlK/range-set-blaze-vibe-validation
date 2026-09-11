@@ -137,19 +137,8 @@ private theorem lowerBoundGap_spec
   · intro nr hmem
     have hsatisfies := List.mem_takeWhile_imp hmem
     simpa using hsatisfies
-  · induction ranges with
-    | nil => simp
-    | cons first rest ih =>
-        by_cases hfirst : first.val.lo < start
-        · rw [List.dropWhile_cons_of_pos (by simp [hfirst])]
-          exact ih hpw.tail
-        · rw [List.dropWhile_cons_of_neg (by simp [hfirst])]
-          intro nr hmem
-          rw [List.mem_cons] at hmem
-          rcases hmem with rfl | hmem
-          · exact not_lt.mp hfirst
-          · exact le_trans (not_lt.mp hfirst)
-              (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
+  · simpa [List.span_eq_takeWhile_dropWhile] using
+      strict_start_split_suffix_lower_bound ranges start hpw
 
 /-- The forward cursor walk preserves canonical order, the accumulator's
 lower-bound interface, and the exact union in one semantic contract. -/
@@ -208,22 +197,6 @@ private theorem absorbSuccessors_preserves_order_lower_bound_and_union
           rcases hmem with heq | hmem
           · exact heq ▸ hcurrent.ge
           · exact hlower nr (by simpa using hmem)
-
-/-- Adding an input contained in a stored range changes neither the represented
-set nor the already-canonical list. -/
-private theorem contained_input_preserves_union
-    (ranges : List NR) (input container : NR)
-    (hmem : container ∈ ranges)
-    (hstart : container.val.lo ≤ input.val.lo)
-    (hend : input.val.hi ≤ container.val.hi) :
-    rangesToSet ranges = rangesToSet ranges ∪ input.val.toSet := by
-  symm
-  apply Set.union_eq_left.mpr
-  refine Set.Subset.trans ?_
-    (rangeToSet_subset_rangesToSet_of_mem hmem)
-  intro x hx
-  rw [IntRange.mem_toSet_iff] at hx ⊢
-  exact ⟨le_trans hstart hx.1, le_trans hx.2 hend⟩
 
 /-- Reusing a mergeable predecessor, replacing it by its glue with the input,
 and absorbing the right prefix preserves both canonical form and exact union. -/
@@ -401,11 +374,12 @@ private theorem internalAddDNRs_preserves_order_and_union
     · rename_i hmerge
       split
       · rename_i hcontains
-        exact ⟨hpw, contained_input_preserves_union ranges input predecessor
+        refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
+        exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
           (hpred_mem predecessor hprev)
           (le_of_lt (hleft predecessor (by
             exact List.mem_of_mem_getLast? (by rw [hprev]; simp))))
-          hcontains⟩
+          hcontains
       · rename_i _hextend
         simpa [gap] using
           predecessor_reuse_preserves_order_and_union ranges input predecessor hpw
@@ -426,8 +400,9 @@ private theorem internalAddDNRs_preserves_order_and_union
         change gap.right.head? = some successor at hnext
         split
         · rename_i hcontains
-          exact ⟨hpw, contained_input_preserves_union ranges input successor
-            (hsucc_mem successor hnext) hcontains.1.le hcontains.2⟩
+          refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
+          exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
+            (hsucc_mem successor hnext) hcontains.1.le hcontains.2
         · rename_i _hnotcontains
           exact fresh_accumulator_preserves_order_and_union ranges input hpw hleftPred
       · rename_i _hnext
@@ -445,8 +420,9 @@ private theorem internalAddDNRs_preserves_order_and_union
       simp [gap, CursorGap.peekNext, hnext]
       split
       · rename_i hcontains
-        exact ⟨hpw, contained_input_preserves_union ranges input successor
-          (hsucc_mem successor hnext) hcontains.1.le hcontains.2⟩
+        refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
+        exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
+          (hsucc_mem successor hnext) hcontains.1.le hcontains.2
       · rename_i _hnotcontains
         exact fresh_accumulator_preserves_order_and_union ranges input hpw hleftPred
     | none =>

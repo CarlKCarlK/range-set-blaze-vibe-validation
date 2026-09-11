@@ -1,5 +1,6 @@
 import Mathlib.Data.Int.Interval
 import Mathlib.Data.List.Pairwise
+import Mathlib.Data.List.TakeWhile
 import Mathlib.Data.Set.Lattice
 import Mathlib.Tactic.Linarith
 
@@ -329,6 +330,19 @@ lemma rangeToSet_subset_rangesToSet_of_mem
       · exact Set.subset_union_left
       · exact Set.subset_union_of_subset_right (ih htail) _
 
+/-- An interval bounded inside a stored range is contained in the represented
+set of the whole range list. -/
+lemma rangeToSet_subset_rangesToSet_of_mem_of_bounds
+    {ranges : List NR} {input : IntRange} {container : NR}
+    (hmem : container ∈ ranges)
+    (hlo : container.val.lo ≤ input.lo)
+    (hhi : input.hi ≤ container.val.hi) :
+    input.toSet ⊆ rangesToSet ranges := by
+  refine Set.Subset.trans ?_ (rangeToSet_subset_rangesToSet_of_mem hmem)
+  intro x hx
+  rw [IntRange.mem_toSet_iff] at hx ⊢
+  exact ⟨hlo.trans hx.1, hx.2.trans hhi⟩
+
 /-- Convert a `RangeSetBlaze` to the set represented by its range list. -/
 def toSet (L : RangeSetBlaze) : Set Int :=
   rangesToSet L.ranges
@@ -348,7 +362,7 @@ lemma toSet_cons {r : NR} {rs : List NR}
 @[simp] lemma toSet_eq_rangesToSet (L : RangeSetBlaze) :
     L.toSet = rangesToSet L.ranges := rfl
 
-/-- Proof-free insertion by scanning once with Rel3. -/
+/-- The gap-separated ordering relation is transitive. -/
 lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
   unfold NR.before at *
   have h₁ : a.val.hi + 1 ≤ b.val.hi :=
@@ -357,6 +371,29 @@ lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
     linarith
   have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
   exact lt_of_le_of_lt h₁ h₃
+
+/-- Every range after a strict lower-bound split starts at or after the split
+key. Canonical ordering propagates the first failed predicate through the
+suffix. -/
+lemma strict_start_split_suffix_lower_bound
+    (ranges : List NR) (start : Int)
+    (hpw : List.Pairwise NR.before ranges) :
+    ∀ nr ∈ (List.span (fun candidate => decide (candidate.val.lo < start)) ranges).snd,
+      start ≤ nr.val.lo := by
+  rw [List.span_eq_takeWhile_dropWhile]
+  induction ranges with
+  | nil => simp
+  | cons first rest ih =>
+      by_cases hfirst : first.val.lo < start
+      · rw [List.dropWhile_cons_of_pos (by simp [hfirst])]
+        exact ih hpw.tail
+      · rw [List.dropWhile_cons_of_neg (by simp [hfirst])]
+        intro nr hmem
+        rw [List.mem_cons] at hmem
+        rcases hmem with rfl | hmem
+        · exact not_lt.mp hfirst
+        · exact le_trans (not_lt.mp hfirst)
+            (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
 
 lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
     a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
@@ -472,32 +509,16 @@ private def insert
 open Classical
 
 /-- The output list of `insert curr xs ok`. -/
- def insertYs (curr : IntRange.NR) (xs : List IntRange.NR)
+def insertYs (curr : IntRange.NR) (xs : List IntRange.NR)
     (ok : List.Pairwise (· ≺ ·) xs) : List IntRange.NR :=
   (insert curr xs ok).1
-
-/-- Pairwise invariant re-established by `insert`. -/
-private lemma insert_pairwise_aux
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs) :
-    List.Pairwise (· ≺ ·) (insert curr xs ok).1 := by
-  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
-  simpa using hpair
 
 /-- Pairwise invariant re-established by `insert`. -/
 lemma insert_pairwise
     (curr : IntRange.NR) (xs : List IntRange.NR)
     (ok : List.Pairwise (· ≺ ·) xs) :
     List.Pairwise (· ≺ ·) (insertYs curr xs ok) := by
-  simpa [insertYs] using insert_pairwise_aux curr xs ok
-
-private lemma insert_sets_aux
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs) :
-    rangesToSet (insert curr xs ok).1 =
-      curr.val.toSet ∪ rangesToSet xs := by
-  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
-  simpa using hset
+  exact (insert curr xs ok).property.1
 
 /-- Set equality spec for `insert`. -/
 lemma insert_sets
@@ -505,17 +526,7 @@ lemma insert_sets
     (ok : List.Pairwise (· ≺ ·) xs) :
     rangesToSet (insertYs curr xs ok) =
       curr.val.toSet ∪ rangesToSet xs := by
-  simpa [insertYs] using insert_sets_aux curr xs ok
-
-private lemma insert_monotone_aux
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs)
-    {z : IntRange.NR}
-    (hz_tail : ∀ y ∈ xs, z ≺ y)
-    (hzc : z ≺ curr) :
-    ∀ y ∈ (insert curr xs ok).1, z ≺ y := by
-  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
-  simpa using hmon hz_tail hzc
+  exact (insert curr xs ok).property.2.1
 
 /-- Monotonicity witness exposed as a lemma:
 if `z` was before every element of the old tail and before `curr`,
@@ -527,7 +538,7 @@ lemma insert_monotone
     (hz_tail : ∀ y ∈ xs, z ≺ y)
     (hzc : z ≺ curr) :
     ∀ y ∈ insertYs curr xs ok, z ≺ y := by
-  simpa [insertYs] using insert_monotone_aux curr xs ok hz_tail hzc
+  exact (insert curr xs ok).property.2.2 hz_tail hzc
 
 /-- Add a (possibly empty) range to a `RangeSetBlaze`. -/
 def internalAddA (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=

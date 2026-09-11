@@ -572,7 +572,7 @@ lemma buildSplit_pairwise
             exact h_glue_after a ha⟩
   simpa [buildSplit, hg, List.append_assoc] using pair_final
 
-/-- New insertion algorithm reusing the split/build pipeline. -/
+/-- Partition-based insertion using the split/build pipeline. -/
 def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   if hr : r.nonempty then
     let curr : NR := ⟨r, hr⟩
@@ -654,40 +654,8 @@ lemma internalAddB_agrees_with_split_sets
     let w := splitRanges curr s.ranges s.ok
     rangesToSet (buildSplit curr w.before w.touching w.after) =
       (internalAddB s r).toSet := by
-  set curr : NR := ⟨r, hr⟩
-  let w := splitRanges curr s.ranges s.ok
-  have hsplit :
-      rangesToSet s.ranges =
-        rangesToSet w.before ∪ rangesToSet w.touching ∪ rangesToSet w.after := by
-    simp [w.order, rangesToSet_append, Set.union_assoc]
-  have hcurr : curr.val.toSet = r.toSet := rfl
-  have hs : s.toSet = rangesToSet s.ranges := toSet_eq_rangesToSet s
-  have hbuild :
-      rangesToSet (buildSplit curr w.before w.touching w.after) =
-        curr.val.toSet ∪
-          (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) :=
-    buildSplit_sets (curr := curr) (xs := s.ranges)
-      (before := w.before) (touching := w.touching) (after := w.after)
-      w.order
-      (by
-        intro t ht
-        exact w.touch_ok ht)
   have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
-  have htoSet :
-      (internalAddB s r).toSet =
-        curr.val.toSet ∪
-          (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
-    simp [internalAddB, hne, curr, w, toSet_eq_rangesToSet, hbuild]
-  calc
-    rangesToSet (buildSplit curr w.before w.touching w.after)
-        = curr.val.toSet ∪
-            (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := hbuild
-    _ = rangesToSet s.ranges ∪ r.toSet := by
-        simp [hcurr, hsplit, Set.union_comm]
-    _ = s.toSet ∪ r.toSet := by
-        rw [hs]
-    _ = (internalAddB s r).toSet :=
-        (internalAddB_toSet s r).symm
+  simp [internalAddB, hne, RangeSetBlaze.toSet]
 
 end
 

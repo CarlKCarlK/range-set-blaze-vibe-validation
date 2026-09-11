@@ -26,7 +26,8 @@ The proof follows the same operation boundaries:
   extension, merges forward, and obtains both guarantees from the
   extend-predecessor contract.
 * `internalAddC_toSet` mirrors the executable branches and normally dispatches
-  to those contracts; only the covered branch needs a local subset argument.
+  to those contracts; the covered branch uses the shared range-containment
+  lemma.
 
 The two start predicates express different boundaries. `internalAddC` uses
 `nr.lo ≤ start` so a stored range beginning exactly at `start` is a predecessor
@@ -140,30 +141,6 @@ private def internalAdd2NRs (xs : List NR) (start stop : Int)
 
 open Classical
 open IntRange
-
-/-- In pairwise gap-separated ranges, every range after the strict-start split
-has lower endpoint at least `start`. -/
-private lemma strict_start_split_suffix_lower_bound
-    (xs : List NR) (start : Int)
-    (hpw : List.Pairwise NR.before xs) :
-    let p : NR → Bool := fun nr => decide (nr.val.lo < start)
-    let split := List.span p xs
-    ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
-  dsimp only
-  rw [List.span_eq_takeWhile_dropWhile]
-  induction xs with
-  | nil => simp
-  | cons x xs ih =>
-      by_cases hx : x.val.lo < start
-      · rw [List.dropWhile_cons_of_pos (by simp [hx])]
-        exact ih hpw.tail
-      · rw [List.dropWhile_cons_of_neg (by simp [hx])]
-        intro nr hmem
-        rw [List.mem_cons] at hmem
-        rcases hmem with rfl | hmem
-        · exact not_lt.mp hx
-        · exact le_trans (not_lt.mp hx)
-            (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
 
 /-- One semantic contract for the scan: it preserves the represented union,
 keeps every output lower endpoint at or after the scan start, and preserves
@@ -856,14 +833,10 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           rename_i prev h_last h_no_gap h_covered
           have h_prev_props :=
             start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
-          have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
-            intro x hx
-            simp [IntRange.toSet] at hx ⊢
-            exact ⟨h_prev_props.1.trans hx.1, hx.2.trans h_covered⟩
-          have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
+          have h_r_covered : r.toSet ⊆ s.toSet := by
             simpa [RangeSetBlaze.toSet] using
-              rangeToSet_subset_rangesToSet_of_mem h_prev_props.2
-          have h_r_covered := Set.Subset.trans h_r_subset_prev h_prev_in_s
+              rangeToSet_subset_rangesToSet_of_mem_of_bounds
+                h_prev_props.2 h_prev_props.1 h_covered
           show s.toSet = s.toSet ∪ r.toSet
           rw [Set.union_eq_self_of_subset_right h_r_covered]
         case isFalse =>
