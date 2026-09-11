@@ -151,6 +151,11 @@ lemma before_lo_lt {a b : NR} (h : a ≺ b) :
     a.val.lo < b.val.lo := by
   exact lt_of_le_of_lt a.property (lt_trans (lt_add_one _) h)
 
+/-- The gap-separated `before` relation cannot hold in both directions. -/
+lemma before_asymm {a b : NR} (h : a ≺ b) : ¬ (b ≺ a) := by
+  intro h'
+  exact (before_lo_lt h).asymm (before_lo_lt h')
+
 /-- In a pairwise-`before` decomposition `prefix ++ suffix`, the last range of
 the prefix is before every range in the suffix. -/
 lemma pairwise_before_prefix_last_suffix

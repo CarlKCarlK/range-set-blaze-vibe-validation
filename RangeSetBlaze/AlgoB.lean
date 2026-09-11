@@ -185,14 +185,7 @@ mutual
                       have hy_eq : y = b := (List.cons.inj horder_cons).1
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
-                      have hcy : curr ≺ y := hy
-                      have hcc : curr ≺ curr := before_trans hcy hy_before
-                      have hlt : curr.val.hi + 1 < curr.val.lo := hcc
-                      have hle : curr.val.lo ≤ curr.val.hi := curr.property
-                      have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
-                      have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-                      have : False := by linarith
-                      exact this.elim
+                      exact (NR.before_asymm hy hy_before).elim
 
                 have htouch : tail.touching = [] := by
                   classical
@@ -265,14 +258,7 @@ mutual
                       have hy_eq : y = b := (List.cons.inj horder_cons).1
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
-                      have hcy : curr ≺ y := hy
-                      have hcc : curr ≺ curr := before_trans hcy hy_before
-                      have hlt : curr.val.hi + 1 < curr.val.lo := hcc
-                      have hle : curr.val.lo ≤ curr.val.hi := curr.property
-                      have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
-                      have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-                      have : False := by linarith
-                      exact this.elim
+                      exact (NR.before_asymm hy hy_before).elim
 
                 have htouch : tail.touching = [] := by
                   classical
@@ -312,23 +298,7 @@ mutual
         | NR.Rel3.left hy =>
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
-            have h1 : curr.val.hi + 1 < y.val.lo := hcy
-            have h2 : y.val.lo ≤ y.val.hi := y.property
-            have h1' : curr.val.hi + 1 < y.val.hi :=
-              lt_of_lt_of_le h1 h2
-            have h3 : y.val.hi + 1 < curr.val.lo := hy
-            have h2' : y.val.hi ≤ y.val.hi + 1 := by linarith
-            have h1'' : curr.val.hi + 1 < y.val.hi + 1 :=
-              lt_of_lt_of_le h1' h2'
-            have hlt : curr.val.hi + 1 < curr.val.lo :=
-              lt_trans h1'' h3
-            have hle : curr.val.lo ≤ curr.val.hi := curr.property
-            have : False := by
-              have hlt' : curr.val.hi + 1 < curr.val.hi :=
-                lt_of_lt_of_le hlt hle
-              have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-              linarith
-            this.elim
+            (NR.before_asymm hcy hy).elim
         | NR.Rel3.overlap _ hy₂ =>
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
@@ -357,22 +327,6 @@ theorem splitTouching_tail_before_nil
       | right hz =>
           simp [splitTouching, hcls]
 
-/-- Contradiction helper: `curr` cannot be both before and after `z`. -/
-private lemma absurd_cycle (curr z : NR)
-    (h₁ : curr ≺ z) (h₂ : z ≺ curr) : False := by
-  have hlt₁ : curr.val.hi + 1 < z.val.lo := h₁
-  have hle_z : z.val.lo ≤ z.val.hi := z.property
-  have hlt₂ : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le hlt₁ hle_z
-  have hlt₃ : z.val.hi + 1 < curr.val.lo := h₂
-  have hle_z_succ : z.val.hi ≤ z.val.hi + 1 := by linarith
-  have hlt₄ : curr.val.hi + 1 < z.val.hi + 1 := lt_of_lt_of_le hlt₂ hle_z_succ
-  have hlt₅ : curr.val.hi + 1 < curr.val.lo := lt_trans hlt₄ hlt₃
-  have hle_curr : curr.val.lo ≤ curr.val.hi := curr.property
-  have hlt₆ : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt₅ hle_curr
-  have : curr.val.hi + 1 ≤ curr.val.hi := hlt₆.le
-  have : False := by linarith
-  exact this
-
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `touching` block. -/
 theorem splitAfter_tail_touching_nil
@@ -392,7 +346,7 @@ theorem splitAfter_tail_touching_nil
           simp [splitAfter, hcls]
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          exact (absurd_cycle curr z hcy hz).elim
+          exact (NR.before_asymm hcy hz).elim
       | overlap hz₁ hz₂ =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (hz₂ hcy).elim
@@ -416,7 +370,7 @@ theorem splitAfter_tail_before_nil
           simp [splitAfter, hcls]
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          exact (absurd_cycle curr z hcy hz).elim
+          exact (NR.before_asymm hcy hz).elim
       | overlap hz₁ hz₂ =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (hz₂ hcy).elim
