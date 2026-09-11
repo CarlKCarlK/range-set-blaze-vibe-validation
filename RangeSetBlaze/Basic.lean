@@ -380,3 +380,208 @@ def toSet (L : RangeSetBlaze) : Set Int :=
     L.toSet = rangesToSet L.ranges := rfl
 
 end RangeSetBlaze
+
+/-!
+## Shared integer range-map semantics
+
+Raw run lists have first-match semantics, while `RangeMapBlaze` packages a
+canonical list. Input ranges reuse `IntRange`, and stored runs reuse `NR`.
+
+We maintain the canonical representation invariant, but do not prove canonical
+uniqueness; uniqueness is not needed for the semantic foundation developed here.
+-/
+
+namespace RangeMapBlaze
+
+/-- A nonempty integer range carrying one opaque value. -/
+structure Run (Value : Type*) where
+  range : NR
+  value : Value
+
+namespace Run
+
+/-- Canonical runs do not overlap; equal-valued touching runs are disallowed. -/
+def before {Value : Type*} (a b : Run Value) : Prop :=
+  a.range.val.hi < b.range.val.lo ∧
+    (a.value = b.value → a.range ≺ b.range)
+
+/-- Canonically shaped runs have strictly ordered, nonoverlapping endpoints. -/
+lemma before_hi_lt {Value : Type*} {a b : Run Value} (h : before a b) :
+    a.range.val.hi < b.range.val.lo :=
+  h.1
+
+/-- A run that canonically precedes another also starts earlier. -/
+lemma before_lo_lt {Value : Type*} {a b : Run Value} (h : before a b) :
+    a.range.val.lo < b.range.val.lo :=
+  lt_of_le_of_lt a.range.property h.1
+
+/-- Equal-valued canonical neighbors have a genuine integer gap. -/
+lemma before_range_of_value_eq {Value : Type*} {a b : Run Value}
+    (h : before a b) (hvalue : a.value = b.value) : a.range ≺ b.range :=
+  h.2 hvalue
+
+/-- Mergeable canonical neighbors necessarily differ in value; because canonical
+neighbors do not overlap, this is precisely the legal touching case. -/
+lemma value_ne_of_before_of_mergeable {Value : Type*} {a b : Run Value}
+    (h : before a b) (hmerge : NR.mergeable a.range b.range) :
+    a.value ≠ b.value := by
+  intro hvalue
+  exact hmerge.1 (h.2 hvalue)
+
+/-- Canonical run order is asymmetric. -/
+lemma before_asymm {Value : Type*} {a b : Run Value} (h : before a b) :
+    ¬ before b a := by
+  intro h'
+  exact (before_lo_lt h).asymm (before_lo_lt h')
+
+/-- Canonical run order is transitive. -/
+lemma before_trans {Value : Type*} {a b c : Run Value}
+    (hab : before a b) (hbc : before b c) : before a c := by
+  have hb : b.range.val.lo ≤ b.range.val.hi := b.range.property
+  have hab_hi : a.range.val.hi < b.range.val.lo := hab.1
+  have hbc_hi : b.range.val.hi < c.range.val.lo := hbc.1
+  have hgap : a.range.val.hi + 1 < c.range.val.lo := by
+    omega
+  refine ⟨lt_trans hab.1 (lt_of_le_of_lt b.range.property hbc.1), ?_⟩
+  intro hvalue
+  simpa only [IntRange.NR.before] using hgap
+
+/-- For `Unit`-valued runs, canonical run ordering is exactly the gap-separated
+ordering used by `RangeSetBlaze`. -/
+lemma before_iff_range_before_of_unit {a b : Run Unit} :
+    before a b ↔ a.range ≺ b.range := by
+  constructor
+  · intro h
+    exact h.2 (Subsingleton.elim _ _)
+  · intro h
+    refine ⟨?_, fun _ => h⟩
+    exact lt_trans (lt_add_one _) h
+
+end Run
+
+/-- A run list has canonical shape when every earlier run canonically precedes every
+later run. -/
+abbrev Canonical {Value : Type*} (runs : List (Run Value)) : Prop :=
+  List.Pairwise Run.before runs
+
+/-- Interpret a raw run list using executable first-match semantics. -/
+def runsToFunction {Value : Type*} : List (Run Value) → Int → Option Value
+  | [], _ => none
+  | run :: rest, key =>
+      letI : Decidable (key ∈ run.range.val.toSet) :=
+        decidable_of_iff (run.range.val.lo ≤ key ∧ key ≤ run.range.val.hi)
+          (IntRange.mem_toSet_iff run.range.val key).symm
+      if key ∈ run.range.val.toSet then
+        some run.value
+      else
+        runsToFunction rest key
+
+@[simp] lemma runsToFunction_nil {Value : Type*} (key : Int) :
+    runsToFunction ([] : List (Run Value)) key = none :=
+  rfl
+
+@[simp] lemma runsToFunction_cons {Value : Type*}
+    (run : Run Value) (rest : List (Run Value)) (key : Int) :
+    runsToFunction (run :: rest) key =
+      if run.range.val.lo ≤ key ∧ key ≤ run.range.val.hi then
+        some run.value
+      else
+        runsToFunction rest key :=
+  by simp [runsToFunction, IntRange.mem_toSet_iff]
+
+/-- Pointwise overwrite by an inclusive integer input range. -/
+def overwrite {Value : Type*}
+    (old : Int → Option Value) (range : IntRange) (value : Value)
+    (key : Int) : Option Value :=
+  letI : Decidable (key ∈ range.toSet) :=
+    decidable_of_iff (range.lo ≤ key ∧ key ≤ range.hi)
+      (IntRange.mem_toSet_iff range key).symm
+  if key ∈ range.toSet then some value else old key
+
+@[simp] lemma overwrite_of_contains {Value : Type*}
+    (old : Int → Option Value) (range : IntRange) (value : Value)
+    (key : Int) (h : key ∈ range.toSet) :
+    overwrite old range value key = some value := by
+  simp [overwrite, h]
+
+@[simp] lemma overwrite_of_not_contains {Value : Type*}
+    (old : Int → Option Value) (range : IntRange) (value : Value)
+    (key : Int) (h : ¬ key ∈ range.toSet) :
+    overwrite old range value key = old key := by
+  simp [overwrite, h]
+
+/-- Overwriting by a reversed input range changes no key. -/
+lemma overwrite_eq_of_hi_lt_lo {Value : Type*}
+    (old : Int → Option Value) (range : IntRange) (value : Value)
+    (h : range.hi < range.lo) :
+    overwrite old range value = old := by
+  funext key
+  apply overwrite_of_not_contains
+  intro hcontains
+  rw [IntRange.mem_toSet_iff] at hcontains
+  exact (not_le_of_gt h) (hcontains.1.trans hcontains.2)
+
+end RangeMapBlaze
+
+/-- A range map represented by canonical, nonempty, labeled integer runs. -/
+structure RangeMapBlaze (Value : Type*) where
+  runs : List (RangeMapBlaze.Run Value)
+  canonical : RangeMapBlaze.Canonical runs
+
+namespace RangeMapBlaze
+
+/-- Interpret a packaged range map as a partial function on integers. -/
+def toFunction {Value : Type*} (map : RangeMapBlaze Value) : Int → Option Value :=
+  runsToFunction map.runs
+
+/-- The support (key set) of a range map consists exactly of mapped keys. -/
+def support {Value : Type*} (map : RangeMapBlaze Value) : Set Int :=
+  { key | map.toFunction key ≠ none }
+
+section Examples
+
+example :
+    runsToFunction
+      ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
+        ⟨⟨⟨5, 7⟩, by decide⟩, 20⟩] : List (Run Nat)) 2 =
+      some 10 := by decide
+
+example :
+    runsToFunction
+      ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
+        ⟨⟨⟨5, 7⟩, by decide⟩, 20⟩] : List (Run Nat)) 4 =
+      none := by decide
+
+example :
+    runsToFunction
+      ([⟨⟨⟨1, 5⟩, by decide⟩, 10⟩,
+        ⟨⟨⟨3, 7⟩, by decide⟩, 20⟩] : List (Run Nat)) 4 =
+      some 10 := by decide
+
+example : Canonical
+    ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
+      ⟨⟨⟨4, 6⟩, by decide⟩, 20⟩] : List (Run Nat)) := by
+  simp [Canonical, Run.before, IntRange.NR.before]
+
+example : ¬ Canonical
+    ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
+      ⟨⟨⟨4, 6⟩, by decide⟩, 10⟩] : List (Run Nat)) := by
+  simp [Canonical, Run.before, IntRange.NR.before]
+
+example :
+    overwrite (fun _ : Int => some 10) ⟨2, 4⟩ 20 3 = some 20 := by
+  norm_num [overwrite]
+
+example :
+    overwrite (fun _ : Int => some 10) ⟨2, 4⟩ 20 5 = some 10 := by
+  norm_num [overwrite]
+
+example :
+    overwrite (fun key : Int => if key = 0 then some 10 else none) ⟨4, 2⟩ 20 =
+      (fun key => if key = 0 then some 10 else none) := by
+  apply overwrite_eq_of_hi_lt_lo
+  decide
+
+end Examples
+
+end RangeMapBlaze
