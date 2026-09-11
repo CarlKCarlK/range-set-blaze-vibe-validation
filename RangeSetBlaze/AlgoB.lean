@@ -6,10 +6,16 @@ open IntRange
 open IntRange.NR
 open scoped IntRange.NR
 
+/-!
+Algo B partitions the entire canonical range list into ranges before,
+mergeable with, and after the input, then glues the middle block. Its partition
+witnesses and rebuild proofs are private implementation details.
+-/
+
 section
 open Classical
 
-structure SplitWitness (curr : NR) (xs : List NR) where
+private structure SplitWitness (curr : NR) (xs : List NR) where
   before : List NR
   touching : List NR
   after : List NR
@@ -19,7 +25,7 @@ structure SplitWitness (curr : NR) (xs : List NR) where
   after_ok : ∀ {a}, a ∈ after → curr ≺ a
 
 mutual
-  def splitBefore (curr : NR) :
+  private def splitBefore (curr : NR) :
       (xs : List NR) → List.Pairwise (· ≺ ·) xs →
       SplitWitness curr xs
     | [], _ =>
@@ -60,7 +66,7 @@ mutual
         | NR.Rel3.right hx =>
             splitAfter curr x hx xs ok
 
-  def splitTouching (curr : NR) (x : NR) (hx : NR.mergeable curr x) :
+  private def splitTouching (curr : NR) (x : NR) (hx : NR.mergeable curr x) :
       (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
       SplitWitness curr (x :: xs)
     | [], _ =>
@@ -83,7 +89,7 @@ mutual
         match NR.Rel3.classify y curr with
         | NR.Rel3.left hy =>
             have hFalse : False :=
-              hx.2 (before_trans xBeforeY hy)
+              hx.2 (NR.before_trans xBeforeY hy)
             False.elim hFalse
         | NR.Rel3.mergeable hy =>
             let tail := splitTouching curr y (NR.mergeable_comm.mp hy) ys okTail
@@ -193,7 +199,7 @@ mutual
                 simpa [ht'] using hx
               after_ok := tail.after_ok }
 
-  def splitAfter (curr : NR) (x : NR) (hx : curr ≺ x) :
+  private def splitAfter (curr : NR) (x : NR) (hx : curr ≺ x) :
       (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
       SplitWitness curr (x :: xs)
     | [], _ =>
@@ -274,95 +280,25 @@ mutual
                     exact tail.after_ok haMem }
         | NR.Rel3.left hy =>
             have hcy : curr ≺ y :=
-              before_trans hx xBeforeY
+              NR.before_trans hx xBeforeY
             (NR.before_asymm hcy hy).elim
         | NR.Rel3.mergeable hy =>
             have hcy : curr ≺ y :=
-              before_trans hx xBeforeY
+              NR.before_trans hx xBeforeY
             False.elim (hy.2 hcy)
 end
 
-/-- Once we are in the touching phase, the recursive tail cannot place any
-element in the `before` block. -/
-theorem splitTouching_tail_before_nil
-    (curr y : NR) (hy : NR.mergeable curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitTouching curr y hy ys ok).before = [] := by
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; rfl
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | left hz =>
-          exact (hy.2 (before_trans hyz hz)).elim
-      | mergeable hz =>
-          simp [splitTouching, hcls]
-      | right hz =>
-          simp [splitTouching, hcls]
-
-/-- Once we are in the after phase, the recursive tail cannot place any element
-in the `touching` block. -/
-theorem splitAfter_tail_touching_nil
-    (curr y : NR) (hy : curr ≺ y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitAfter curr y hy ys ok).touching = [] := by
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; rfl
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | right hz =>
-          simp [splitAfter, hcls]
-      | left hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (NR.before_asymm hcy hz).elim
-      | mergeable hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz.2 hcy).elim
-
-/-- Once we are in the after phase, the recursive tail cannot place any element
-in the `before` block. -/
-theorem splitAfter_tail_before_nil
-    (curr y : NR) (hy : curr ≺ y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitAfter curr y hy ys ok).before = [] := by
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; rfl
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | right hz =>
-          simp [splitAfter, hcls]
-      | left hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (NR.before_asymm hcy hz).elim
-      | mergeable hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz.2 hcy).elim
-
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
-def splitRanges (curr : NR) (xs : List NR)
+private def splitRanges (curr : NR) (xs : List NR)
     (ok : List.Pairwise (· ≺ ·) xs) :
     SplitWitness curr xs :=
   splitBefore curr xs ok
 
 /-- Fold `NR.glue` across a list, starting from `curr`. -/
-def glueMany (curr : NR) (ts : List NR) : NR :=
+private def glueMany (curr : NR) (ts : List NR) : NR :=
   ts.foldl (fun acc t => NR.glue acc t) curr
 
-lemma glueMany_sets_mergeable
+private lemma glueMany_sets_mergeable
     (curr : NR) (ts : List NR)
     (htouch : ∀ t ∈ ts, NR.mergeable curr t) :
     (glueMany curr ts).val.toSet =
@@ -388,11 +324,11 @@ lemma glueMany_sets_mergeable
         Set.union_left_comm, Set.union_comm]
 
 /-- Rebuild the list by gluing the touching block. -/
-def buildSplit (curr : NR) (before touching after : List NR) :
+private def buildSplit (curr : NR) (before touching after : List NR) :
     List NR :=
   before ++ [glueMany curr touching] ++ after
 
-lemma buildSplit_sets
+private lemma buildSplit_sets
     (curr : NR) {xs before touching after}
     (hx : xs = before ++ touching ++ after)
     (ht : ∀ t ∈ touching, NR.mergeable curr t) :
@@ -404,7 +340,7 @@ lemma buildSplit_sets
     Set.union_left_comm, Set.union_comm]
 
 /-- Everything in `before` is before everything in `touching`. -/
-lemma split_before_before_touch
+private lemma split_before_before_touch
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃t⦄, t ∈ w.touching → b ≺ t := by
@@ -423,7 +359,7 @@ lemma split_before_before_touch
   exact cross_before (a := b) (b := t) hb ht'
 
 /-- Everything in `before` is before everything in `after`. -/
-lemma split_before_before_after
+private lemma split_before_before_after
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃a⦄, a ∈ w.after → b ≺ a := by
@@ -442,7 +378,7 @@ lemma split_before_before_after
   exact cross_before (a := b) (b := a) hb ha'
 
 /-- Everything in `touching` is before everything in `after`. -/
-lemma split_touch_before_after
+private lemma split_touch_before_after
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃t⦄, t ∈ w.touching → ∀ ⦃a⦄, a ∈ w.after → t ≺ a := by
@@ -462,7 +398,7 @@ lemma split_touch_before_after
 
 /-- Legality for Algo B rebuild:
 `before ++ [glueMany curr touching] ++ after` is pairwise `(· ≺ ·)`. -/
-lemma buildSplit_pairwise
+private lemma buildSplit_pairwise
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     List.Pairwise (· ≺ ·)
@@ -587,7 +523,8 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   else
     s
 
-lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
+/-- Algo B represents exactly the union of the old range set and the input interval. -/
+theorem internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddB s r).toSet = s.toSet ∪ r.toSet := by
   by_cases hr : r.nonempty
   · -- Nonempty range: unfold and compare via list sets.
@@ -642,49 +579,7 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
       _ = s.toSet ∪ (∅ : Set Int) := by simp
       _ = s.toSet ∪ r.toSet := by simp [hEmptySet]
 
-def internalAdd := internalAddB
-
-@[simp] lemma internalAdd_toSet (s : RangeSetBlaze) (r : IntRange) :
-    (internalAdd s r).toSet = s.toSet ∪ r.toSet :=
-  internalAddB_toSet s r
-
-lemma internalAddB_agrees_with_split_sets
-    (s : RangeSetBlaze) (r : IntRange) (hr : r.nonempty) :
-    let curr : NR := ⟨r, hr⟩
-    let w := splitRanges curr s.ranges s.ok
-    rangesToSet (buildSplit curr w.before w.touching w.after) =
-      (internalAddB s r).toSet := by
-  have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
-  simp [internalAddB, hne, RangeSetBlaze.toSet]
 
 end
-
-open IntRange
-open scoped IntRange.NR
-
-set_option linter.unusedTactic true
-
--- Core spec check (re-exports the simp lemma ensures Algo B meets the spec)
-example (s : RangeSetBlaze) (r : IntRange) :
-    (internalAdd s r).toSet = s.toSet ∪ r.toSet := by
-  exact internalAdd_toSet s r
-
-def rA : IntRange := ⟨0, 2⟩
-def rB : IntRange := ⟨3, 5⟩     -- touches rA
-def rC : IntRange := ⟨10, 12⟩   -- separate
-
-def S0 : RangeSetBlaze :=
-  let nrA : NR := ⟨rA, by decide⟩
-  ⟨[nrA], by
-    exact
-      List.pairwise_singleton (R := (· ≺ ·)) (a := nrA)⟩
-
--- After inserting a touching range, union spec holds.
-example : (internalAdd S0 rB).toSet = S0.toSet ∪ rB.toSet := by
-  exact internalAdd_toSet S0 rB
-
--- After inserting a disjoint range, union spec still holds.
-example : (internalAdd S0 rC).toSet = S0.toSet ∪ rC.toSet := by
-  exact internalAdd_toSet S0 rC
 
 end RangeSetBlaze

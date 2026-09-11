@@ -66,14 +66,10 @@ comparison `20 ≤ 30`. The proof is:
 rename_i prev h_last h_no_gap h_covered
 have h_prev_props :=
   start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
-have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
-  intro x hx
-  simp [IntRange.toSet] at hx ⊢
-  exact ⟨h_prev_props.1.trans hx.1, hx.2.trans h_covered⟩
-have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
+have h_r_covered : r.toSet ⊆ s.toSet := by
   simpa [RangeSetBlaze.toSet] using
-    rangeToSet_subset_rangesToSet_of_mem h_prev_props.2
-have h_r_covered := Set.Subset.trans h_r_subset_prev h_prev_in_s
+    toSet_subset_rangesToSet_of_mem_of_bounds
+      h_prev_props.2 h_prev_props.1 h_covered
 show s.toSet = s.toSet ∪ r.toSet
 rw [Set.union_eq_self_of_subset_right h_r_covered]
 ```
@@ -262,8 +258,8 @@ In the Lean development,
 `deleteExtraNRs_loop_preserves_order_lower_bound_and_union` proves these
 facts together. A **contract** is the collection of assumptions a component
 accepts and conclusions it guarantees; this theorem is the forward scan's
-contract. The smaller theorem `deleteExtraNRs_loop_sets` exposes only its
-set-preservation conclusion where that is all a caller needs.
+contract. Its private callers project the ordering, boundary, and set facts
+they need directly from that single result.
 
 ## 5. How an insertion reaches the forward scan
 
@@ -432,29 +428,29 @@ explained in Section 3.
 |---|---|
 | Nonempty inclusive interval | `IntRange.NR` |
 | Genuine gap and canonical order | `NR.before` |
-| Genuine gaps compose from left to right | `RangeSetBlaze.before_trans` |
+| Genuine gaps compose from left to right | `NR.before_trans` |
 | A genuine gap implies increasing lower endpoints | `NR.before_lo_lt` |
 | Overlap-or-touch test | `NR.mergeable`, `NR.mergeable_of_startsBefore_of_not_before` |
 | Hull represents exactly the union | `NR.glue_sets` |
 | A hull remains separated from outside ranges | `NR.before_glue`, `NR.glue_before` |
 | Set denoted by a list of ranges | `rangesToSet` |
 | Reconstructing the set meaning of appended list pieces | `rangesToSet_append` |
-| A stored range is contained in the represented set | `rangeToSet_subset_rangesToSet_of_mem` |
+| An interval bounded by a stored range is contained in the represented set | `toSet_subset_rangesToSet_of_mem_of_bounds` |
 | Separation between the last left range and all right ranges | `NR.pairwise_before_prefix_last_suffix` |
-| Lower-endpoint fact for ranges after an insertion point | `strict_start_split_suffix_lower_bound` |
+| Lower-endpoint fact for ranges after an insertion point | `NR.strict_start_split_suffix_lower_bound` |
 | Forward-scan contract | `deleteExtraNRs_loop_preserves_order_lower_bound_and_union` |
-| Set-only consequence of that contract | `deleteExtraNRs_loop_sets` |
 | Separate-insertion contract | `internalAdd2NRs_preserves_order_and_union` |
 | Bridge from the `≤ start` split to the `< start` split | `nonstrict_start_gap_implies_strict_start_gap` |
 | Predecessor endpoint bound and membership in the old list | `start_split_predecessor_le_and_mem` |
 | Predecessor-enlargement contract | `extend_predecessor_preserves_order_and_union` |
-| Safe wrappers and final set theorem | `internalAdd2_safe_toSet`, `internalAdd2_safe_from_le_toSet`, `internalAddC_extendPrev_safe_toSet`, `internalAddC_toSet` |
+| Strict/non-strict insertion wrappers | `insertAtStrictStartGap`, `insertAtNonstrictStartGap` (private) |
+| Extend-predecessor wrapper | `extendPredecessor` (private) |
+| Public Algo C correctness theorem | `internalAddC_toSet` |
 
 Some names reflect the executable list implementation rather than the
 mathematics. In particular, `deleteExtraNRs` implements the forward scan, and
-`internalAdd2` implements separate insertion. The word “safe” in a wrapper
-name means that the wrapper packages a list together with proof that the list
-has the required stored form.
+`internalAdd2NRs` implements separate insertion. The private wrappers package
+raw lists together with proof that they have the required stored form.
 
 Lean operations such as `List.span`, `takeWhile`, `dropWhile`,
 `getLast?`, and `dropLast` implement splitting a list, selecting the

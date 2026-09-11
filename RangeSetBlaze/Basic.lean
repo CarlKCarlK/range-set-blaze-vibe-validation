@@ -42,15 +42,9 @@ lemma mem_toSet_iff (r : IntRange) (x : Int) :
     x ∈ r.toSet ↔ r.lo ≤ x ∧ x ≤ r.hi := by
   simp [toSet]
 
-/-- A nonempty range has a nonempty set representation. -/
-@[simp]
-lemma toSet_nonempty_of_le {r : IntRange} (h : r.lo ≤ r.hi) :
-    r.toSet.Nonempty := by
-  simp [toSet, Set.nonempty_Icc, h]
-
 /-- The set representation is nonempty iff the range is nonempty. -/
 @[simp]
-lemma nonempty_toSet_iff (r : IntRange) :
+lemma toSet_nonempty_iff (r : IntRange) :
     r.toSet.Nonempty ↔ r.nonempty := by
   simp [toSet, Set.nonempty_Icc, nonempty]
 
@@ -64,31 +58,25 @@ instance : DecidablePred nonempty :=
 def mergeRange (a b : IntRange) : IntRange :=
   { lo := min a.lo b.lo, hi := max a.hi b.hi }
 
-/-- If `a` and `b` are nonempty, so is `mergeRange a b`. -/
+/-- A hull is nonempty when its left input is nonempty. -/
 lemma mergeRange_nonempty {a b : IntRange}
-    (ha : a.lo ≤ a.hi) (_hb : b.lo ≤ b.hi) :
-    (mergeRange a b).lo ≤ (mergeRange a b).hi := by
+    (ha : a.nonempty) : (mergeRange a b).nonempty := by
   have h₁ : min a.lo b.lo ≤ a.lo := min_le_left _ _
   have h₂ : a.hi ≤ max a.hi b.hi := le_max_left _ _
   exact le_trans h₁ (le_trans ha h₂)
 
-/-- For `NR.before`, not-`a ≺ b` iff `b.lo ≤ a.hi + 1`. -/
-lemma not_before_iff {a b : { r : IntRange // r.lo ≤ r.hi }} :
-    ¬ (a.val.hi + 1 < b.val.lo) ↔ b.val.lo ≤ a.val.hi + 1 := by
-  exact not_lt
-
 /-- If `a` and `b` have no integer gap either way, their hull is their union. -/
 lemma mergeRange_toSet_of_noGap
-    {a : IntRange} {ha : a.lo ≤ a.hi} {b : { r : IntRange // r.lo ≤ r.hi }}
-    (h₁ : ¬ (a.hi + 1 < b.val.lo))
-    (h₂ : ¬ (b.val.hi + 1 < a.lo)) :
-    (mergeRange a b.val).toSet = a.toSet ∪ b.val.toSet := by
+    {a b : IntRange}
+    (h₁ : ¬ (a.hi + 1 < b.lo))
+    (h₂ : ¬ (b.hi + 1 < a.lo)) :
+    (mergeRange a b).toSet = a.toSet ∪ b.toSet := by
   ext x; constructor <;> intro hx
   · have h_lo :
-      min a.lo b.val.lo ≤ x := by
+      min a.lo b.lo ≤ x := by
         simpa [IntRange.mem_toSet_iff, mergeRange] using hx.left
     have h_hi :
-      x ≤ max a.hi b.val.hi := by
+      x ≤ max a.hi b.hi := by
         simpa [IntRange.mem_toSet_iff, mergeRange] using hx.right
     have h_lo' := (min_le_iff).1 h_lo
     have h_hi' := (le_max_iff).1 h_hi
@@ -98,14 +86,11 @@ lemma mergeRange_toSet_of_noGap
       | inl h_xa =>
         exact Or.inl ⟨h_ax, h_xa⟩
       | inr h_xb =>
-        by_cases h_bx : b.val.lo ≤ x
+        by_cases h_bx : b.lo ≤ x
         · exact Or.inr ⟨h_bx, h_xb⟩
         ·
-          have hx_lt : x < b.val.lo := lt_of_not_ge h_bx
-          have hb_le : b.val.lo ≤ a.hi + 1 := by
-            have := (not_before_iff (a := ⟨a, ha⟩)
-              (b := ⟨b.val, b.property⟩)).1 h₁
-            simpa using this
+          have hx_lt : x < b.lo := lt_of_not_ge h_bx
+          have hb_le : b.lo ≤ a.hi + 1 := not_lt.mp h₁
           have hx_lt' : x < a.hi + 1 := lt_of_lt_of_le hx_lt hb_le
           have hx_le_a : x ≤ a.hi := by
             linarith
@@ -117,12 +102,9 @@ lemma mergeRange_toSet_of_noGap
         · exact Or.inl ⟨h_ax, h_xa⟩
         ·
           have hx_lt : x < a.lo := lt_of_not_ge h_ax
-          have ha_le : a.lo ≤ b.val.hi + 1 := by
-            have := (not_before_iff (a := ⟨b.val, b.property⟩)
-              (b := ⟨a, ha⟩)).1 h₂
-            simpa using this
-          have hx_lt' : x < b.val.hi + 1 := lt_of_lt_of_le hx_lt ha_le
-          have hx_le_b : x ≤ b.val.hi := by
+          have ha_le : a.lo ≤ b.hi + 1 := not_lt.mp h₂
+          have hx_lt' : x < b.hi + 1 := lt_of_lt_of_le hx_lt ha_le
+          have hx_le_b : x ≤ b.hi := by
             linarith
           exact Or.inr ⟨h_bx, hx_le_b⟩
       | inr h_xb =>
@@ -157,6 +139,16 @@ lemma before_asymm {a b : NR} (h : a ≺ b) : ¬ (b ≺ a) := by
   intro h'
   exact (before_lo_lt h).asymm (before_lo_lt h')
 
+/-- The gap-separated ordering relation is transitive. -/
+lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
+  unfold before at *
+  have h₁ : a.val.hi + 1 ≤ b.val.hi :=
+    (lt_of_lt_of_le hab b.property).le
+  have h₂ : b.val.hi ≤ b.val.hi + 1 := by
+    linarith
+  have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
+  exact lt_of_le_of_lt h₁ h₃
+
 /-- In a pairwise-`before` decomposition `prefix ++ suffix`, the last range of
 the prefix is before every range in the suffix. -/
 lemma pairwise_before_prefix_last_suffix
@@ -167,6 +159,43 @@ lemma pairwise_before_prefix_last_suffix
   intro nr hnr
   exact (List.pairwise_append.mp hpair).2.2 prev
     (List.mem_of_mem_getLast? (by simp [hlast])) nr hnr
+
+/-- Every range after a strict lower-bound split starts at or after the split
+key. Canonical ordering propagates the first failed predicate through the
+suffix. -/
+lemma strict_start_split_suffix_lower_bound
+    (ranges : List NR) (start : Int)
+    (hpw : List.Pairwise before ranges) :
+    ∀ nr ∈ (List.span (fun candidate => decide (candidate.val.lo < start)) ranges).snd,
+      start ≤ nr.val.lo := by
+  rw [List.span_eq_takeWhile_dropWhile]
+  induction ranges with
+  | nil => simp
+  | cons first rest ih =>
+      by_cases hfirst : first.val.lo < start
+      · rw [List.dropWhile_cons_of_pos (by simp [hfirst])]
+        exact ih hpw.tail
+      · rw [List.dropWhile_cons_of_neg (by simp [hfirst])]
+        intro nr hmem
+        rw [List.mem_cons] at hmem
+        rcases hmem with rfl | hmem
+        · exact not_lt.mp hfirst
+        · exact le_trans (not_lt.mp hfirst)
+            (before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
+
+/-- Gap-separated ranges have disjoint set representations. -/
+lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
+    a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
+  ext x
+  constructor
+  · intro hx
+    rcases hx with ⟨hax, hbx⟩
+    rcases (IntRange.mem_toSet_iff a.val x).1 hax with ⟨_, hax_hi⟩
+    rcases (IntRange.mem_toSet_iff b.val x).1 hbx with ⟨hbx_lo, _⟩
+    have h_lt : a.val.hi < b.val.lo := lt_trans (lt_add_one _) h
+    exact (not_le_of_gt h_lt) (le_trans hbx_lo hax_hi)
+  · intro hx
+    cases hx
 
 instance : DecidableRel before :=
   fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
@@ -223,7 +252,7 @@ def Rel3.classify (a b : NR) : Rel3 a b := by
 /-- Merge two overlapping/touching ranges into a single nonempty range. -/
 def glue (a b : NR) : NR :=
   ⟨IntRange.mergeRange a.val b.val,
-    IntRange.mergeRange_nonempty a.property b.property⟩
+    IntRange.mergeRange_nonempty a.property⟩
 
 /-- Gluing onto `a` preserves mergeability with any range already mergeable with `a`. -/
 lemma mergeable_glue_left {a b c : NR} (h : mergeable a c) :
@@ -257,8 +286,7 @@ lemma glue_sets (a b : NR) (h : mergeable a b) :
         a.val.toSet ∪ b.val.toSet := by
     simpa using
       (IntRange.mergeRange_toSet_of_noGap
-        (a := a.val) (ha := a.property)
-        (b := ⟨b.val, b.property⟩)
+        (a := a.val) (b := b.val)
         (by simpa [before] using h₁)
         (by
           have := h₂
@@ -319,7 +347,7 @@ def rangesToSet (rs : List NR) : Set Int :=
       simp [ih, Set.union_left_comm, Set.union_comm]
 
 /-- Every range occurring in a list is contained in that list's represented set. -/
-lemma rangeToSet_subset_rangesToSet_of_mem
+private lemma member_toSet_subset_rangesToSet
     {ranges : List NR} {nr : NR} (hmem : nr ∈ ranges) :
     nr.val.toSet ⊆ rangesToSet ranges := by
   induction ranges with
@@ -332,13 +360,13 @@ lemma rangeToSet_subset_rangesToSet_of_mem
 
 /-- An interval bounded inside a stored range is contained in the represented
 set of the whole range list. -/
-lemma rangeToSet_subset_rangesToSet_of_mem_of_bounds
+lemma toSet_subset_rangesToSet_of_mem_of_bounds
     {ranges : List NR} {input : IntRange} {container : NR}
     (hmem : container ∈ ranges)
     (hlo : container.val.lo ≤ input.lo)
     (hhi : input.hi ≤ container.val.hi) :
     input.toSet ⊆ rangesToSet ranges := by
-  refine Set.Subset.trans ?_ (rangeToSet_subset_rangesToSet_of_mem hmem)
+  refine Set.Subset.trans ?_ (member_toSet_subset_rangesToSet hmem)
   intro x hx
   rw [IntRange.mem_toSet_iff] at hx ⊢
   exact ⟨hlo.trans hx.1, hx.2.trans hhi⟩
@@ -347,240 +375,8 @@ lemma rangeToSet_subset_rangesToSet_of_mem_of_bounds
 def toSet (L : RangeSetBlaze) : Set Int :=
   rangesToSet L.ranges
 
-/-- The `toSet` of an empty `RangeSetBlaze` is empty. -/
-@[simp]
-lemma toSet_nil (ok : List.Pairwise (· ≺ ·) ([] : List NR)) :
-    toSet ⟨[], ok⟩ = (∅ : Set Int) := rfl
-
-/-- The `toSet` of a cons is the union of the head's `toSet` and the tail's `toSet`. -/
-@[simp]
-lemma toSet_cons {r : NR} {rs : List NR}
-    {ok : List.Pairwise (· ≺ ·) (r :: rs)} :
-    toSet ⟨r :: rs, ok⟩ =
-      r.val.toSet ∪ toSet ⟨rs, ok.tail⟩ := rfl
 /-- The record set view is definitionally the set represented by its ranges. -/
 @[simp] lemma toSet_eq_rangesToSet (L : RangeSetBlaze) :
     L.toSet = rangesToSet L.ranges := rfl
-
-/-- The gap-separated ordering relation is transitive. -/
-lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
-  unfold NR.before at *
-  have h₁ : a.val.hi + 1 ≤ b.val.hi :=
-    (lt_of_lt_of_le hab b.property).le
-  have h₂ : b.val.hi ≤ b.val.hi + 1 := by
-    linarith
-  have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
-  exact lt_of_le_of_lt h₁ h₃
-
-/-- Every range after a strict lower-bound split starts at or after the split
-key. Canonical ordering propagates the first failed predicate through the
-suffix. -/
-lemma strict_start_split_suffix_lower_bound
-    (ranges : List NR) (start : Int)
-    (hpw : List.Pairwise NR.before ranges) :
-    ∀ nr ∈ (List.span (fun candidate => decide (candidate.val.lo < start)) ranges).snd,
-      start ≤ nr.val.lo := by
-  rw [List.span_eq_takeWhile_dropWhile]
-  induction ranges with
-  | nil => simp
-  | cons first rest ih =>
-      by_cases hfirst : first.val.lo < start
-      · rw [List.dropWhile_cons_of_pos (by simp [hfirst])]
-        exact ih hpw.tail
-      · rw [List.dropWhile_cons_of_neg (by simp [hfirst])]
-        intro nr hmem
-        rw [List.mem_cons] at hmem
-        rcases hmem with rfl | hmem
-        · exact not_lt.mp hfirst
-        · exact le_trans (not_lt.mp hfirst)
-            (NR.before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
-
-lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
-    a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
-  ext x
-  constructor
-  · intro hx
-    rcases hx with ⟨hax, hbx⟩
-    rcases (IntRange.mem_toSet_iff a.val x).1 hax with ⟨hax_lo, hax_hi⟩
-    rcases (IntRange.mem_toSet_iff b.val x).1 hbx with ⟨hbx_lo, hbx_hi⟩
-    have h_lt : a.val.hi < b.val.lo := by
-      exact lt_trans (lt_add_one _) h
-    have hx_le : b.val.lo ≤ a.val.hi := le_trans hbx_lo hax_hi
-    exact (not_le_of_gt h_lt) hx_le
-  · intro hx
-    cases hx
-
-private def insert
-  (curr : IntRange.NR)
-  : (xs : List IntRange.NR) → List.Pairwise (· ≺ ·) xs →
-      { ys : List IntRange.NR //
-        List.Pairwise (· ≺ ·) ys ∧
-        rangesToSet ys = curr.val.toSet ∪ rangesToSet xs ∧
-        ∀ {z : IntRange.NR},
-          (∀ y ∈ xs, z ≺ y) → z ≺ curr →
-          ∀ y ∈ ys, z ≺ y }
-  | [], _ =>
-      ⟨[curr], by
-          exact List.pairwise_singleton (R := (· ≺ ·)) (a := curr),
-        by simp [rangesToSet],
-        by
-          intro z _ hzc y hy
-          have hy' : y = curr := List.mem_singleton.mp hy
-          simpa [hy'] using hzc⟩
-  | x :: xs, hpx =>
-      have hx_tail : ∀ y ∈ xs, x ≺ y := (List.pairwise_cons.1 hpx).1
-      have h_tail : List.Pairwise (· ≺ ·) xs := (List.pairwise_cons.1 hpx).2
-      match IntRange.NR.Rel3.classify curr x with
-      | IntRange.NR.Rel3.left hcx =>
-          let hcurr_tail : ∀ y ∈ xs, curr ≺ y :=
-            by
-              intro y hy
-              exact before_trans hcx (hx_tail y hy)
-          let pair : List.Pairwise (· ≺ ·) (curr :: x :: xs) :=
-            List.pairwise_cons.2
-              ⟨by
-                  intro y hy
-                  rcases List.mem_cons.1 hy with hy | hy
-                  · simpa [hy] using hcx
-                  · exact hcurr_tail y hy,
-                hpx⟩
-          let mono :
-              ∀ {z : IntRange.NR},
-                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
-                ∀ y ∈ curr :: x :: xs, z ≺ y :=
-            by
-              intro z hzxs hzc y hy
-              rcases List.mem_cons.1 hy with hy | hy
-              · simpa [hy] using hzc
-              · exact hzxs y hy
-          ⟨curr :: x :: xs, pair, by simp [rangesToSet_cons], mono⟩
-      | IntRange.NR.Rel3.right hxc =>
-          let ⟨ys, hpair, hset, hmon⟩ := insert curr xs h_tail
-          let hx_all : ∀ y ∈ ys, x ≺ y :=
-            hmon
-              (by
-                intro y hy
-                exact hx_tail y hy)
-              hxc
-          let pair : List.Pairwise (· ≺ ·) (x :: ys) :=
-            List.pairwise_cons.2 ⟨hx_all, hpair⟩
-          let setEq :
-              rangesToSet (x :: ys) = curr.val.toSet ∪ rangesToSet (x :: xs) :=
-            by
-              have := congrArg (fun s => x.val.toSet ∪ s) hset
-              simpa [rangesToSet_cons, Set.union_left_comm, Set.union_assoc, Set.union_comm] using this
-          let mono :
-              ∀ {z : IntRange.NR},
-                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
-                ∀ y ∈ x :: ys, z ≺ y :=
-            by
-              intro z hzxs hzc y hy
-              rcases List.mem_cons.1 hy with hy | hy
-              · simpa [hy] using hzxs x (by simp)
-              · have hz_tail : ∀ w ∈ xs, z ≺ w := by
-                  intro w hw
-                  exact hzxs w (List.mem_cons_of_mem _ hw)
-                exact hmon hz_tail hzc y hy
-          ⟨x :: ys, pair, setEq, mono⟩
-      | IntRange.NR.Rel3.mergeable hmergeable =>
-          let glued := IntRange.NR.glue curr x
-          have gl_sets : glued.val.toSet = curr.val.toSet ∪ x.val.toSet :=
-            IntRange.NR.glue_sets curr x hmergeable
-          let ⟨ys, hpair, hset, hmon⟩ := insert glued xs h_tail
-          let setEq :
-              rangesToSet ys = curr.val.toSet ∪ rangesToSet (x :: xs) :=
-            by
-              simpa [rangesToSet_cons, gl_sets, Set.union_assoc,
-                Set.union_left_comm, Set.union_comm] using hset
-          let mono :
-              ∀ {z : IntRange.NR},
-                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
-                ∀ y ∈ ys, z ≺ y :=
-            by
-              intro z hzxs hzc y hy
-              have hz_tail : ∀ w ∈ xs, z ≺ w := by
-                intro w hw
-                exact hzxs w (List.mem_cons_of_mem _ hw)
-              have hzx : z ≺ x := hzxs x (by simp)
-              have hzg : z ≺ glued := NR.before_glue hzc hzx
-              exact hmon hz_tail hzg y hy
-          ⟨ys, hpair, setEq, mono⟩
-
-open Classical
-
-/-- The output list of `insert curr xs ok`. -/
-def insertYs (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs) : List IntRange.NR :=
-  (insert curr xs ok).1
-
-/-- Pairwise invariant re-established by `insert`. -/
-lemma insert_pairwise
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs) :
-    List.Pairwise (· ≺ ·) (insertYs curr xs ok) := by
-  exact (insert curr xs ok).property.1
-
-/-- Set equality spec for `insert`. -/
-lemma insert_sets
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs) :
-    rangesToSet (insertYs curr xs ok) =
-      curr.val.toSet ∪ rangesToSet xs := by
-  exact (insert curr xs ok).property.2.1
-
-/-- Monotonicity witness exposed as a lemma:
-if `z` was before every element of the old tail and before `curr`,
-then `z` is before every element of the new list. -/
-lemma insert_monotone
-    (curr : IntRange.NR) (xs : List IntRange.NR)
-    (ok : List.Pairwise (· ≺ ·) xs)
-    {z : IntRange.NR}
-    (hz_tail : ∀ y ∈ xs, z ≺ y)
-    (hzc : z ≺ curr) :
-    ∀ y ∈ insertYs curr xs ok, z ≺ y := by
-  exact (insert curr xs ok).property.2.2 hz_tail hzc
-
-/-- Add a (possibly empty) range to a `RangeSetBlaze`. -/
-def internalAddA (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
-  if hr : r.nonempty then
-    let curr : IntRange.NR := ⟨r, hr⟩
-    let ⟨ys, hpair, _, _⟩ := insert curr s.ranges s.ok
-    ⟨ys, hpair⟩
-  else s
-
-/-- Set-level correctness of `internalAddA`. -/
-lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
-    (internalAddA s r).toSet = s.toSet ∪ r.toSet := by
-  classical
-  by_cases hr : r.nonempty
-  ·
-    -- Inserted case: reduce to the list-level `insert` lemma.
-    set res := insert ⟨r, hr⟩ s.ranges s.ok with hInsert
-    rcases res with ⟨ys, hpair, hset, hmon⟩
-    have hNotEmpty : ¬ r.empty := by
-      simpa [IntRange.nonempty_iff_not_empty] using hr
-    have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by
-      simp [internalAddA, hNotEmpty, hInsert.symm]
-    have hcurr : (⟨r, hr⟩ : IntRange.NR).val.toSet = r.toSet := rfl
-    have htoSet : (internalAddA s r).toSet = rangesToSet ys := by
-      simp [hstruct, toSet_eq_rangesToSet]
-    have hsToSet : s.toSet = rangesToSet s.ranges := by
-      simp [toSet_eq_rangesToSet]
-    calc
-      (internalAddA s r).toSet
-          = rangesToSet ys := htoSet
-      _ = r.toSet ∪ rangesToSet s.ranges := by
-          simpa [hcurr] using hset
-      _ = s.toSet ∪ r.toSet := by
-          rw [hsToSet.symm, Set.union_comm]
-  ·
-    -- Empty range case: its set is ∅, and `internalAddA` returns `s`.
-    have hlt : r.hi < r.lo := by
-      -- hr = ¬(r.lo ≤ r.hi)
-      simpa [IntRange.nonempty, not_le] using hr
-    have hEmpty : r.toSet = (∅ : Set Int) := by
-      simpa using IntRange.toSet_eq_empty_of_hi_lt_lo hlt
-    have hempty : r.empty := hlt
-    simp [internalAddA, hempty, hEmpty, Set.union_comm]
 
 end RangeSetBlaze

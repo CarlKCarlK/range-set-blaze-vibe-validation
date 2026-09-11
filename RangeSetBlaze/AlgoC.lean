@@ -22,7 +22,7 @@ The proof follows the same operation boundaries:
 * `internalAdd2NRs` inserts at a strict-start split and invokes that merge
   logic. Its contract proves both `List.Pairwise NR.before` and set-union
   correctness.
-* `internalAddC_extendPrev_safe` replaces a touching predecessor by its
+* `extendPredecessor` replaces a touching predecessor by its
   extension, merges forward, and obtains both guarantees from the
   extend-predecessor contract.
 * `internalAddC_toSet` mirrors the executable branches and normally dispatches
@@ -68,9 +68,6 @@ private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (Li
         deleteExtraNRs_loop merged pendingTail
       else
         (current, next :: pendingTail)
-
-@[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
-    deleteExtraNRs_loop current [] = (current, []) := rfl
 
 @[simp] private lemma deleteExtraNRs_loop_cons_merge
     (current next : NR) (tail : List NR)
@@ -230,7 +227,7 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
             simpa using (not_le.mp hmerge)
           have h_current_tail : ∀ z ∈ tail, NR.before current z := by
             intro z hz
-            exact RangeSetBlaze.before_trans h_head
+            exact NR.before_trans h_head
               (List.rel_of_pairwise_cons hpwP hz)
           rw [h_loop_eq]
           constructor
@@ -262,22 +259,6 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
           rw [h_loop_eq]
           simp [Set.union_left_comm]
         exact ⟨horder_out, hbound_out, hsets_out⟩
-/-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
-lemma deleteExtraNRs_loop_sets
-    (start : Int) :
-    ∀ (pending : List NR) (current : NR),
-      current.val.lo = start →
-      (∀ nr ∈ pending, start ≤ nr.val.lo) →
-      rangesToSet
-          (let res := deleteExtraNRs_loop current pending;
-            res.fst :: res.snd)
-        =
-          current.val.toSet ∪ rangesToSet pending := by
-  intro pending current hlo hge
-  exact (deleteExtraNRs_loop_preserves_order_lower_bound_and_union
-    start current pending hlo hge).2.2
-
-
 /-- If `before` is nonempty and its last element is strictly before `start`,
 then every element of `before` is strictly before `start`. -/
 private lemma all_before_strict_before_start
@@ -379,7 +360,7 @@ private lemma internalAdd2NRs_preserves_order_and_union
 
   have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
     simpa [p, split, after] using
-      (strict_start_split_suffix_lower_bound xs start hpw)
+      (NR.strict_start_split_suffix_lower_bound xs start hpw)
 
   have h_initial_lo : initial.val.lo = start := by
     simp [initial, curr, inserted, mkNR]
@@ -480,15 +461,6 @@ private theorem nonstrict_start_gap_implies_strict_start_gap
     exact heq.symm ▸
       (show hasGap (xs.takeWhile nonstrict) from Or.inr ⟨hne, hlast⟩)
 
-/-- A successful optional-last lookup supplies the nonempty witness required by
-`List.getLast` and identifies the resulting element. -/
-theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.getLast? = some x) :
-    ∃ hne : xs ≠ [], xs.getLast hne = x := by
-  have hne : xs ≠ [] := by
-    intro hnil
-    simp [hnil] at h
-  exact ⟨hne, List.getLast_of_getLast?_eq_some h⟩
-
 /-- The last range in the non-strict start split starts no later than `start` and is sourced from `xs`. -/
 private lemma start_split_predecessor_le_and_mem
     (xs : List NR) (start : Int) (prev : NR)
@@ -500,17 +472,16 @@ private lemma start_split_predecessor_le_and_mem
       (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst =
         xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) :=
     congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
-  have ⟨hne, heq⟩ := getLast?_eq_some_getLast hlast
+  rw [h_span] at hlast
   have h_prev_mem_take :
       prev ∈ xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) := by
-    rw [← h_span, ← heq]
-    exact List.getLast_mem hne
+    exact List.mem_of_mem_getLast? hlast
   have h_pred := List.mem_takeWhile_imp h_prev_mem_take
   exact ⟨of_decide_eq_true h_pred, List.takeWhile_subset _ h_prev_mem_take⟩
 
 /-- Insert after a strict-start gap and construct the result from the proved
 `Pairwise NR.before` invariant. -/
-def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
+private def insertAtStrictStartGap (s : RangeSetBlaze) (r : IntRange)
     (hgap_lt :
       let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
       let before := split.fst
@@ -527,47 +498,47 @@ def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
         xs r.lo r.hi hle s.ok hgap_lt).1
     fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
 
-/-- Wrapper for internalAdd2_safe that accepts a gap hypothesis with (≤ start) predicate
-and converts it to the (< start) predicate needed by internalAdd2_safe. -/
-def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
+/-- Insert through the non-strict predecessor split after converting its gap
+evidence to the strict insertion boundary. -/
+private def insertAtNonstrictStartGap (s : RangeSetBlaze) (r : IntRange)
     (hgap_le :
       let split := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
       let before := split.fst
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
     RangeSetBlaze :=
-  internalAdd2_safe s r
+  insertAtStrictStartGap s r
     (nonstrict_start_gap_implies_strict_start_gap s.ranges r.lo s.ok hgap_le)
 
 /-- The extend-predecessor helper has two proof clients: its executable
-wrapper needs the ordering invariant, while the public correctness theorem
-needs exact set semantics.  This specification derives the split,
+wrapper needs the ordering invariant, while the correctness projection used
+by the final theorem needs exact set semantics. This specification derives
+the split,
 predecessor decomposition, and predecessor-to-suffix boundary once, then
 exposes both guarantees as projections. -/
 private lemma extend_predecessor_preserves_order_and_union
-    (s : RangeSetBlaze)
-    (start stop : Int)
+    (s : RangeSetBlaze) (r : IntRange)
     (before after : List NR) (prev : NR)
     (hDecomp :
-      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges
+      (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
         = (before, after)))
     (hLast : List.getLast? before = some prev)
-    (hNoGap : ¬ (prev.val.hi + 1 < start))
-    (hExtend : prev.val.hi < stop) :
+    (hNoGap : ¬ (prev.val.hi + 1 < r.lo))
+    (hExtend : prev.val.hi < r.hi) :
     let init := before.dropLast
-    let extendedHi := max prev.val.hi stop
+    let extendedHi := max prev.val.hi r.hi
     let extended := mkNR prev.val.lo extendedHi (by
       exact le_trans prev.property (le_max_left _ _))
     let res := deleteExtraNRs_loop extended after
     let newRanges := init ++ res.fst :: res.snd
     List.Pairwise NR.before newRanges ∧
       rangesToSet newRanges = s.toSet ∪
-        (mkNR start stop (by
+        (mkNR r.lo r.hi (by
           omega)).val.toSet := by
   intro init extendedHi extended res newRanges
   have hne : before ≠ [] := by
     intro h
     simp [h] at hLast
-  let p := fun nr : NR => decide (nr.val.lo ≤ start)
+  let p := fun nr : NR => decide (nr.val.lo ≤ r.lo)
   have h_s_decomp : s.ranges = before ++ after := by
     have h_span : List.span p s.ranges = (before, after) := by
       simpa [p] using hDecomp
@@ -631,16 +602,16 @@ private lemma extend_predecessor_preserves_order_and_union
   have hpw_newRanges : List.Pairwise NR.before newRanges :=
     List.pairwise_append.mpr ⟨hpw_init, hpw_res, hcross⟩
   have h_last_span :
-      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges).fst.getLast? =
+      (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst.getLast? =
         some prev := by
     rw [hDecomp]
     exact hLast
-  have h_prev_lo_le_start : prev.val.lo ≤ start :=
-    (start_split_predecessor_le_and_mem s.ranges start prev h_last_span).1
-  have h_start_stop : start ≤ stop := by
-    have h_start : start ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
+  have h_prev_lo_le_start : prev.val.lo ≤ r.lo :=
+    (start_split_predecessor_le_and_mem s.ranges r.lo prev h_last_span).1
+  have h_start_stop : r.lo ≤ r.hi := by
+    have h_start : r.lo ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
     omega
-  let inserted := mkNR start stop h_start_stop
+  let inserted := mkNR r.lo r.hi h_start_stop
   have h_extended_toSet : extended.val.toSet = prev.val.toSet ∪ inserted.val.toSet := by
     have horder : prev.val.lo ≤ inserted.val.lo := by
       simpa [inserted, mkNR] using h_prev_lo_le_start
@@ -670,28 +641,27 @@ private lemma extend_predecessor_preserves_order_and_union
         ac_rfl
       _ = s.toSet ∪ inserted.val.toSet := by rw [h_s_toSet]
 
-/-- Safe extend when `prev` touches/overlaps `r` and `r.hi > prev.hi`.
+/-- Extend when `prev` touches/overlaps `r` and `r.hi > prev.hi`.
     We replace `prev` by `extended := [prev.lo, max prev.hi r.hi]` and
     run the same loop on the tail. -/
-private def internalAddC_extendPrev_safe
-    (s : RangeSetBlaze) (_r : IntRange)
-    (start stop : Int)  -- start = r.lo, stop = r.hi
+private def extendPredecessor
+    (s : RangeSetBlaze) (r : IntRange)
     (before after : List NR) (prev : NR)
     (hDecomp :
-      (List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges
+      (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
         = (before, after)))
     (hLast : List.getLast? before = some prev)
-    (_hNoGap : ¬ (prev.val.hi + 1 < start))
-    (_hExtend : prev.val.hi < stop) :
+    (_hNoGap : ¬ (prev.val.hi + 1 < r.lo))
+    (_hExtend : prev.val.hi < r.hi) :
     RangeSetBlaze := by
   let init := before.dropLast
-  let extendedHi := max prev.val.hi stop
+  let extendedHi := max prev.val.hi r.hi
   have hExtendedValid : prev.val.lo ≤ extendedHi := by
     exact le_trans prev.property (le_max_left _ _)
   let extended := mkNR prev.val.lo extendedHi hExtendedValid
   let res := deleteExtraNRs_loop extended after
   let newRanges := init ++ res.fst :: res.snd
-  have hspec := extend_predecessor_preserves_order_and_union s start stop before after prev
+  have hspec := extend_predecessor_preserves_order_and_union s r before after prev
     hDecomp hLast _hNoGap _hExtend
   exact fromNRs newRanges hspec.1
 /-- Production-shaped insertion: handle empty, separated, covered, and
@@ -718,7 +688,7 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
         have hgap : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
           left
           exact h_before_nil
-        internalAdd2_safe_from_le s r hgap
+        insertAtNonstrictStartGap s r hgap
     | some prev =>
         if hgap : decide (prev.val.hi + 1 < start) then
           -- prev has a gap, pass it along
@@ -728,11 +698,9 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
               intro h_empty
               simp [h_empty] at h_last
             use hne
-            have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
-            have : hne = hne' := proof_irrel hne hne'
-            rw [this, heq]
+            rw [List.getLast_of_getLast?_eq_some h_last]
             exact of_decide_eq_true hgap
-          internalAdd2_safe_from_le s r hgap_proof
+          insertAtNonstrictStartGap s r hgap_proof
         else
           -- No gap case: prev.hi + 1 ≥ start
           -- Check if r extends beyond prev
@@ -740,7 +708,7 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
             -- r is fully covered by prev, return unchanged
             s
           else
-            -- r extends beyond prev: call safe extend helper
+            -- r extends beyond prev: extend it and merge forward
             have hDecomp : List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges = (before, after) := rfl
             have hNoGap : ¬ (prev.val.hi + 1 < start) := by
               intro h_gap
@@ -748,55 +716,51 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
               rw [this] at hgap
               simp at hgap
             have hExtend : prev.val.hi < stop := not_le.mp _hextend
-            internalAddC_extendPrev_safe s r start stop before after prev hDecomp h_last hNoGap hExtend
+            extendPredecessor s r before after prev hDecomp h_last hNoGap hExtend
 
-/-- Safe insertion: set-level correctness. -/
-theorem internalAdd2_safe_toSet
+/-- Correctness of insertion across the strict start boundary. -/
+private theorem insertAtStrictStartGap_toSet
     (s : RangeSetBlaze) (r : IntRange)
     (hgap_lt :
       let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
       let before := split.fst
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
-  (internalAdd2_safe s r hgap_lt).toSet = s.toSet ∪ r.toSet := by
+  (insertAtStrictStartGap s r hgap_lt).toSet = s.toSet ∪ r.toSet := by
   by_cases hempty : r.hi < r.lo
-  · simp [internalAdd2_safe, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
-  · simpa [internalAdd2_safe, hempty, fromNRs, RangeSetBlaze.toSet, mkNR] using
+  · simp [insertAtStrictStartGap, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
+  · simpa [insertAtStrictStartGap, hempty, fromNRs, RangeSetBlaze.toSet, mkNR] using
       (internalAdd2NRs_preserves_order_and_union
         s.ranges r.lo r.hi (not_lt.mp hempty) s.ok hgap_lt).2
 
-/-- Bridge: the `_from_le` wrapper preserves the same set equality as `internalAdd2_safe`. -/
-theorem internalAdd2_safe_from_le_toSet
+/-- Correctness of insertion through the non-strict predecessor boundary. -/
+private theorem insertAtNonstrictStartGap_toSet
     (s : RangeSetBlaze) (r : IntRange)
     (hgap_le :
       let split := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
       let before := split.fst
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
-  (internalAdd2_safe_from_le s r hgap_le).toSet = s.toSet ∪ r.toSet := by
-  -- The wrapper's named gap conversion supplies `internalAdd2_safe` directly.
-  unfold internalAdd2_safe_from_le
-  exact internalAdd2_safe_toSet s r _
+  (insertAtNonstrictStartGap s r hgap_le).toSet = s.toSet ∪ r.toSet := by
+  unfold insertAtNonstrictStartGap
+  exact insertAtStrictStartGap_toSet s r _
 
 /-- Set-correctness for the extend-prev branch. -/
-theorem internalAddC_extendPrev_safe_toSet
+private theorem extendPredecessor_toSet
     (s : RangeSetBlaze) (r : IntRange)
-    (start stop : Int)
     (before after : List NR) (prev : NR)
-    (hDecomp : List.span (fun nr => decide (nr.val.lo ≤ start)) s.ranges = (before, after))
+    (hDecomp : List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges = (before, after))
     (hLast : List.getLast? before = some prev)
-    (hNoGap : ¬ (prev.val.hi + 1 < start))
-    (hExtend : prev.val.hi < stop)
-    (hStartEq : start = r.lo)
-    (hStopEq : stop = r.hi) :
-    (internalAddC_extendPrev_safe s r start stop before after prev hDecomp hLast hNoGap hExtend).toSet
+    (hNoGap : ¬ (prev.val.hi + 1 < r.lo))
+    (hExtend : prev.val.hi < r.hi) :
+    (extendPredecessor s r before after prev hDecomp hLast hNoGap hExtend).toSet
     = s.toSet ∪ r.toSet := by
-  have hspec := extend_predecessor_preserves_order_and_union s start stop before after prev
+  have hspec := extend_predecessor_preserves_order_and_union s r before after prev
     hDecomp hLast hNoGap hExtend
-  have h_start_stop : start ≤ stop := by
-    have h_start : start ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
+  have h_start_stop : r.lo ≤ r.hi := by
+    have h_start : r.lo ≤ prev.val.hi + 1 := le_of_not_gt hNoGap
     omega
-  have h_interval : (mkNR start stop h_start_stop).val.toSet = r.toSet := by
-    simp [mkNR, IntRange.toSet, hStartEq, hStopEq]
-  unfold internalAddC_extendPrev_safe
+  have h_interval : (mkNR r.lo r.hi h_start_stop).val.toSet = r.toSet := by
+    rfl
+  unfold extendPredecessor
   simp only [fromNRs, RangeSetBlaze.toSet]
   change rangesToSet _ = s.toSet ∪ r.toSet
   simpa [h_interval] using hspec.2
@@ -817,14 +781,14 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     -- match on getLast?
     split
     case h_1 =>
-      -- none case: before = [], call internalAdd2_safe_from_le
-      exact internalAdd2_safe_from_le_toSet s r _
+      -- none case: before = [], insert through the predecessor boundary
+      exact insertAtNonstrictStartGap_toSet s r _
     case h_2 =>
       -- some prev case
       split
       case isTrue =>
-        -- gap case: prev.hi + 1 < start, call internalAdd2_safe_from_le
-        exact internalAdd2_safe_from_le_toSet s r _
+        -- gap case: prev.hi + 1 < start, insert through the predecessor boundary
+        exact insertAtNonstrictStartGap_toSet s r _
       case isFalse =>
         -- no gap case: check if covered or extend
         split
@@ -835,20 +799,20 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             start_split_predecessor_le_and_mem s.ranges r.lo prev h_last
           have h_r_covered : r.toSet ⊆ s.toSet := by
             simpa [RangeSetBlaze.toSet] using
-              rangeToSet_subset_rangesToSet_of_mem_of_bounds
+              toSet_subset_rangesToSet_of_mem_of_bounds
                 h_prev_props.2 h_prev_props.1 h_covered
           show s.toSet = s.toSet ∪ r.toSet
           rw [Set.union_eq_self_of_subset_right h_r_covered]
         case isFalse =>
-          -- extend case: prev.hi < r.hi, call internalAddC_extendPrev_safe
+          -- extend case: prev.hi < r.hi, extend the predecessor
           rename_i prev h_last h_no_gap h_not_covered
           have h_extend : prev.val.hi < r.hi := not_le.mp h_not_covered
-          exact internalAddC_extendPrev_safe_toSet s r r.lo r.hi
+          exact extendPredecessor_toSet s r
             (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
             (List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
             prev (List.span_eq_takeWhile_dropWhile _ _)
             (by simpa only [List.span_eq_takeWhile_dropWhile] using h_last)
-            h_no_gap h_extend rfl rfl
+            h_no_gap h_extend
 
 open Classical
 open IntRange

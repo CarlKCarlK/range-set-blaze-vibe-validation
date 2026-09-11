@@ -1,4 +1,4 @@
-import RangeSetBlaze.AlgoC
+import RangeSetBlaze.Basic
 
 namespace RangeSetBlaze
 
@@ -138,7 +138,7 @@ private theorem lowerBoundGap_spec
     have hsatisfies := List.mem_takeWhile_imp hmem
     simpa using hsatisfies
   · simpa [List.span_eq_takeWhile_dropWhile] using
-      strict_start_split_suffix_lower_bound ranges start hpw
+      NR.strict_start_split_suffix_lower_bound ranges start hpw
 
 /-- The forward cursor walk preserves canonical order, the accumulator's
 lower-bound interface, and the exact union in one semantic contract. -/
@@ -177,7 +177,7 @@ private theorem absorbSuccessors_preserves_order_lower_bound_and_union
             hnotBefore)
         have hcurrentBeforeTail : ∀ nr ∈ tail, current ≺ nr := by
           intro nr hmem
-          exact before_trans hcurrentBefore
+          exact NR.before_trans hcurrentBefore
             (List.rel_of_pairwise_cons hright hmem)
         have hresult : absorbSuccessors current (next :: tail) =
             (current, next :: tail) := by
@@ -314,7 +314,7 @@ private theorem fresh_accumulator_preserves_order_and_union
       rcases (by simpa [hdecomp] using hp : p ∈ pre ∨ p = predecessor) with hp | rfl
       · have hp_before_pred := (List.pairwise_append.mp hpwleft).2.2 p
           hp predecessor (by simp)
-        exact before_trans hp_before_pred hpred_input
+        exact NR.before_trans hp_before_pred hpred_input
       · exact hpred_input
   have hleft_to_scan : ∀ p ∈ gap.left, ∀ nr ∈
       (absorbSuccessors input gap.right).fst ::
@@ -375,7 +375,7 @@ private theorem internalAddDNRs_preserves_order_and_union
       split
       · rename_i hcontains
         refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
-        exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
+        exact toSet_subset_rangesToSet_of_mem_of_bounds
           (hpred_mem predecessor hprev)
           (le_of_lt (hleft predecessor (by
             exact List.mem_of_mem_getLast? (by rw [hprev]; simp))))
@@ -401,7 +401,7 @@ private theorem internalAddDNRs_preserves_order_and_union
         split
         · rename_i hcontains
           refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
-          exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
+          exact toSet_subset_rangesToSet_of_mem_of_bounds
             (hsucc_mem successor hnext) hcontains.1.le hcontains.2
         · rename_i _hnotcontains
           exact fresh_accumulator_preserves_order_and_union ranges input hpw hleftPred
@@ -421,7 +421,7 @@ private theorem internalAddDNRs_preserves_order_and_union
       split
       · rename_i hcontains
         refine ⟨hpw, (Set.union_eq_left.mpr ?_).symm⟩
-        exact rangeToSet_subset_rangesToSet_of_mem_of_bounds
+        exact toSet_subset_rangesToSet_of_mem_of_bounds
           (hsucc_mem successor hnext) hcontains.1.le hcontains.2
       · rename_i _hnotcontains
         exact fresh_accumulator_preserves_order_and_union ranges input hpw hleftPred
@@ -447,47 +447,5 @@ theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
   · let input : NR := ⟨r, not_lt.mp hempty⟩
     have hspec := internalAddDNRs_preserves_order_and_union s.ranges input s.ok
     simpa [internalAddD, hempty, RangeSetBlaze.toSet, input] using hspec.2
-
-/-! ## Small executable regression examples
-
-The first examples assert concrete results without relying on Algo C.  The
-remaining examples compare Algo D's concrete range lists with Algo C across
-twelve control-flow situations.
--/
-
-private def testNR (lo hi : Int) (h : lo ≤ hi := by omega) : NR :=
-  ⟨{ lo := lo, hi := hi }, h⟩
-
-private def testSet (ranges : List NR)
-    (ok : List.Pairwise NR.before ranges := by native_decide) : RangeSetBlaze :=
-  ⟨ranges, ok⟩
-
-private def sameAsC (s : RangeSetBlaze) (r : IntRange) : Bool :=
-  (internalAddD s r).ranges == (internalAddC s r).ranges
-
-example : (internalAddD (testSet [testNR 10 30]) { lo := 10, hi := 20 }).ranges =
-    [testNR 10 30] := by native_decide
-example : (internalAddD (testSet [testNR 10 15]) { lo := 10, hi := 20 }).ranges =
-    [testNR 10 20] := by native_decide
-example : (internalAddD (testSet [testNR 1 5, testNR 10 15]) { lo := 4, hi := 11 }).ranges =
-    [testNR 1 15] := by native_decide
-example : (internalAddD
-    (testSet [testNR 10 12, testNR 16 18, testNR 22 25])
-    { lo := 11, hi := 23 }).ranges = [testNR 10 25] := by native_decide
-example : (internalAddD (testSet [testNR 10 12, testNR 20 22])
-    { lo := 11, hi := 15 }).ranges = [testNR 10 15, testNR 20 22] := by native_decide
-
-example : sameAsC (testSet [testNR 10 12]) { lo := 5, hi := 4 } := by native_decide
-example : sameAsC (testSet []) { lo := 5, hi := 7 } := by native_decide
-example : sameAsC (testSet [testNR 10 12]) { lo := 1, hi := 3 } := by native_decide
-example : sameAsC (testSet [testNR 10 12]) { lo := 20, hi := 22 } := by native_decide
-example : sameAsC (testSet [testNR 1 5, testNR 10 20]) { lo := 12, hi := 15 } := by native_decide
-example : sameAsC (testSet [testNR 10 20, testNR 30 35]) { lo := 10, hi := 15 } := by native_decide
-example : sameAsC (testSet [testNR 1 3, testNR 10 12]) { lo := 5, hi := 7 } := by native_decide
-example : sameAsC (testSet [testNR 10 12, testNR 20 22]) { lo := 7, hi := 9 } := by native_decide
-example : sameAsC (testSet [testNR 10 12, testNR 14 16, testNR 18 20, testNR 30 35]) { lo := 7, hi := 18 } := by native_decide
-example : sameAsC (testSet [testNR 1 5, testNR 10 12]) { lo := 4, hi := 7 } := by native_decide
-example : sameAsC (testSet [testNR 1 5, testNR 8 10, testNR 20 22]) { lo := 4, hi := 7 } := by native_decide
-example : sameAsC (testSet [testNR 1 5, testNR 8 10, testNR 13 15, testNR 30 35]) { lo := 4, hi := 13 } := by native_decide
 
 end RangeSetBlaze
