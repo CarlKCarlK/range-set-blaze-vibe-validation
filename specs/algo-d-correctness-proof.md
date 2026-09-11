@@ -84,7 +84,8 @@ normalized ranges and exact set union for every input interval.
   non-strict-right boundary facts.
 - `absorbSuccessors_preserves_order_lower_bound_and_union` is the single
   forward-scan induction.
-- The two containment lemmas prove that their inputs add no new elements.
+- The shared containment lemma proves that either unchanged branch adds no new
+  elements.
 - The predecessor-reuse and fresh-accumulator lemmas reconstruct canonical
   output and exact union.
 - `internalAddDNRs_preserves_order_and_union` follows the executable branches.
