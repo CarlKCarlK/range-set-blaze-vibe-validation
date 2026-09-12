@@ -27,6 +27,18 @@ theorem nonempty_iff_not_empty (r : IntRange) :
 /-- View a range as a set of integers using the closed interval. -/
 def toSet (r : IntRange) : Set Int := Set.Icc r.lo r.hi
 
+/-- The number of integers in an inclusive range. Empty ranges contribute zero. -/
+def cardinality (r : IntRange) : Nat :=
+  if r.lo ≤ r.hi then Int.toNat (r.hi - r.lo + 1) else 0
+
+@[simp] lemma cardinality_of_nonempty {r : IntRange} (h : r.lo ≤ r.hi) :
+    r.cardinality = Int.toNat (r.hi - r.lo + 1) := by
+  simp [cardinality, h]
+
+@[simp] lemma cardinality_of_empty {r : IntRange} (h : r.hi < r.lo) :
+    r.cardinality = 0 := by
+  simp [cardinality, not_le.mpr h]
+
 /-- The set view is empty iff `hi < lo`. -/
 @[simp]
 lemma toSet_eq_empty_iff (r : IntRange) :
@@ -332,6 +344,21 @@ namespace RangeSetBlaze
 /-- The set represented by a list of nonempty integer ranges. -/
 def rangesToSet (rs : List NR) : Set Int :=
   rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
+
+/-- The sum of the inclusive cardinalities of a range list. For a canonical
+list this is the cardinality of the represented finite integer set. -/
+def rangesCardinality (rs : List NR) : Nat :=
+  rs.foldr (fun r total => r.val.cardinality + total) 0
+
+@[simp] lemma rangesCardinality_nil :
+    rangesCardinality ([] : List NR) = 0 := rfl
+
+@[simp] lemma rangesCardinality_cons (r : NR) (rs : List NR) :
+    rangesCardinality (r :: rs) = r.val.cardinality + rangesCardinality rs := rfl
+
+/-- The mathematical element count represented by a range set. -/
+def cardinality (s : RangeSetBlaze) : Nat :=
+  rangesCardinality s.ranges
 
 @[simp] lemma rangesToSet_nil :
     rangesToSet ([] : List NR) = (∅ : Set Int) := rfl
