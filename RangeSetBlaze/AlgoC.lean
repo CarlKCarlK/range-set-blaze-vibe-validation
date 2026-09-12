@@ -837,12 +837,6 @@ private structure CLenRawResult where
   ranges : List NR
   cachedLength : Nat
 
-/-- The production expression `safe_len(old_end..=new_end - 1)`. Under the
-strict endpoint inequalities at its call sites, this equals `new_end-old_end`.
--/
-private def extensionCardinality (oldEnd newEnd : Int) : Nat :=
-  IntRange.cardinality { lo := oldEnd, hi := newEnd - 1 }
-
 /-- Forward merge state. `cachedLength` has already had every swallowed stored
 range subtracted, but does not yet include the final extension beyond the
 original pending end. -/
@@ -894,7 +888,7 @@ private def finishDeleteExtraCLen
   if originalEnd < scanned.current.val.hi then
     { scanned with
       cachedLength := scanned.cachedLength +
-        extensionCardinality originalEnd scanned.current.val.hi }
+        IntRange.rightExtensionCardinality originalEnd scanned.current.val.hi }
   else
     scanned
 
@@ -919,7 +913,7 @@ private def extendPredecessorCLen
   let extended := mkNR predecessor.val.lo extendedHi
     (predecessor.property.trans (le_max_left _ _))
   let lengthAfterExtension := cachedLength +
-    extensionCardinality predecessor.val.hi input.val.hi
+    IntRange.rightExtensionCardinality predecessor.val.hi input.val.hi
   let scanned := finishDeleteExtraCLen extended after input.val.hi lengthAfterExtension
   ⟨before.dropLast ++ scanned.current :: scanned.pending, scanned.cachedLength⟩
 
@@ -944,58 +938,6 @@ private def internalAddCLenRaw
           ⟨ranges, cachedLength⟩
         else
           extendPredecessorCLen before after predecessor input cachedLength
-
-@[simp] private lemma rangesCardinality_append (xs ys : List NR) :
-    rangesCardinality (xs ++ ys) =
-      rangesCardinality xs + rangesCardinality ys := by
-  induction xs with
-  | nil => simp
-  | cons x xs ih => simp [ih, Nat.add_assoc]
-
-/-- Extending a nonempty interval to the right adds exactly the translated tail
-used by production's cached-length update. -/
-private lemma cardinality_extend_right
-    (current : NR) (newEnd : Int) (hextend : current.val.hi < newEnd) :
-    (mkNR current.val.lo newEnd
-        (current.property.trans hextend.le)).val.cardinality =
-      current.val.cardinality +
-        extensionCardinality current.val.hi newEnd := by
-  have hcurrent : current.val.lo ≤ current.val.hi := current.property
-  have hwhole : current.val.lo ≤ newEnd := hcurrent.trans hextend.le
-  have htail : current.val.hi ≤ newEnd - 1 := by omega
-  rw [IntRange.cardinality_of_nonempty hwhole]
-  rw [IntRange.cardinality_of_nonempty hcurrent]
-  rw [show extensionCardinality current.val.hi newEnd =
-      Int.toNat (newEnd - 1 - current.val.hi + 1) by
-    simp [extensionCardinality, IntRange.cardinality, htail]]
-  simp only [mkNR]
-  have htail_eq : newEnd - 1 - current.val.hi + 1 =
-      newEnd - current.val.hi := by omega
-  rw [htail_eq, ← Int.toNat_add (by omega) (by omega)]
-  congr 1
-  omega
-
-/-- Two nonempty ranges with the same lower endpoint differ in cardinality by
-the translated right tail between their upper endpoints. -/
-private lemma cardinality_eq_add_extension
-    (initial current : NR)
-    (hlo : current.val.lo = initial.val.lo)
-    (hextend : initial.val.hi < current.val.hi) :
-    current.val.cardinality = initial.val.cardinality +
-      extensionCardinality initial.val.hi current.val.hi := by
-  have hinitial : initial.val.lo ≤ initial.val.hi := initial.property
-  have hcurrent : current.val.lo ≤ current.val.hi := current.property
-  have htail : initial.val.hi ≤ current.val.hi - 1 := by omega
-  rw [IntRange.cardinality_of_nonempty hcurrent]
-  rw [IntRange.cardinality_of_nonempty hinitial]
-  rw [show extensionCardinality initial.val.hi current.val.hi =
-      Int.toNat (current.val.hi - 1 - initial.val.hi + 1) by
-    simp [extensionCardinality, IntRange.cardinality, htail]]
-  have htail_eq : current.val.hi - 1 - initial.val.hi + 1 =
-      current.val.hi - initial.val.hi := by omega
-  rw [htail_eq, ← Int.toNat_add (by omega) (by omega)]
-  congr 1
-  omega
 
 /-- The CLen scan preserves the current lower endpoint and can only increase
 its upper endpoint. -/
@@ -1028,46 +970,40 @@ private lemma deleteExtraCLenLoop_preserves_cached_base
   | cons next tail ih =>
       by_cases hmerge : next.val.lo ≤ current.val.hi + 1
       · simp only [deleteExtraCLenLoop, hmerge, if_true]
+        have hremoved : next.val.cardinality ≤ cachedLength := by
+          rw [rangesCardinality_cons] at hlength
+          omega
         apply ih
         rw [rangesCardinality_cons] at hlength
-        omega
+        exact Nat.sub_eq_iff_eq_add hremoved |>.2 (by omega)
       · simpa [deleteExtraCLenLoop, hmerge] using hlength
 
-/-- `finishDeleteExtraCLen` changes only the cache component of the scan and
-adds exactly the final right extension when one exists. -/
-private lemma finishDeleteExtraCLen_spec
+/-- `finishDeleteExtraCLen` leaves the untouched base and suffix in the cache,
+then adds exactly the final right extension when one exists. -/
+private lemma finishDeleteExtraCLen_preserves_cached_base
     (current : NR) (pending : List NR) (originalEnd : Int)
     (cachedLength base : Nat)
     (hlength : cachedLength = base + rangesCardinality pending) :
     let scanned := finishDeleteExtraCLen current pending originalEnd cachedLength
-    scanned.current = (deleteExtraNRs_loop current pending).fst ∧
-      scanned.pending = (deleteExtraNRs_loop current pending).snd ∧
-      scanned.cachedLength = base + rangesCardinality scanned.pending +
-        if originalEnd < scanned.current.val.hi then
-          extensionCardinality originalEnd scanned.current.val.hi
-        else 0 := by
+    scanned.cachedLength = base + rangesCardinality scanned.pending +
+      if originalEnd < scanned.current.val.hi then
+        IntRange.rightExtensionCardinality originalEnd scanned.current.val.hi
+      else 0 := by
   let raw := deleteExtraCLenLoop current pending cachedLength
-  have hcorr := deleteExtraCLenLoop_corresponds current pending cachedLength
   have hcache := deleteExtraCLenLoop_preserves_cached_base
     current pending cachedLength base hlength
   unfold finishDeleteExtraCLen
   dsimp only
   by_cases hextend : originalEnd < raw.current.val.hi
   · simp only [raw, hextend, if_true]
-    exact ⟨hcorr.1, hcorr.2, by omega⟩
+    omega
   · simp only [raw, hextend, if_false, add_zero]
-    exact ⟨hcorr.1, hcorr.2, hcache⟩
+    exact hcache
 
 /-- Fresh insertion's subtract-then-add bookkeeping computes the cardinality
 of its output when entered at a genuine canonical insertion boundary. -/
 private theorem freshInsertCLen_preserves_cardinality
     (ranges : List NR) (input : NR) (cachedLength : Nat)
-    (_hcanonical : List.Pairwise NR.before ranges)
-    (_hgap :
-      let before := (List.span
-        (fun nr => decide (nr.val.lo < input.val.lo)) ranges).fst
-      before = [] ∨
-        ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < input.val.lo)
     (hlength : cachedLength = rangesCardinality ranges) :
     (freshInsertCLen ranges input cachedLength).cachedLength =
       rangesCardinality (freshInsertCLen ranges input cachedLength).ranges := by
@@ -1086,10 +1022,10 @@ private theorem freshInsertCLen_preserves_cardinality
   have hspec : scanned.cachedLength =
       rangesCardinality before + rangesCardinality scanned.pending +
         if input.val.hi < scanned.current.val.hi then
-          extensionCardinality input.val.hi scanned.current.val.hi
+          IntRange.rightExtensionCardinality input.val.hi scanned.current.val.hi
         else 0 := by
-    exact (finishDeleteExtraCLen_spec input after input.val.hi
-      cachedLength (rangesCardinality before) hcache).2.2
+    exact finishDeleteExtraCLen_preserves_cached_base input after input.val.hi
+      cachedLength (rangesCardinality before) hcache
   have hendRaw := deleteExtraCLenLoop_preserves_endpoints
     input after cachedLength
   have hend : scanned.current.val.lo = input.val.lo ∧
@@ -1101,7 +1037,7 @@ private theorem freshInsertCLen_preserves_cardinality
     rangesCardinality (before ++ scanned.current :: scanned.pending)
   rw [rangesCardinality_append, rangesCardinality_cons]
   by_cases hextend : input.val.hi < scanned.current.val.hi
-  · have hcard := cardinality_eq_add_extension input scanned.current
+  · have hcard := NR.cardinality_eq_add_right_extension input scanned.current
       hend.1 hextend
     rw [hspec, if_pos hextend, hcard]
     omega
@@ -1117,11 +1053,9 @@ adding only newly exposed tails computes the cardinality of the output. -/
 private theorem extendPredecessorCLen_preserves_cardinality
     (ranges before after : List NR) (predecessor input : NR)
     (cachedLength : Nat)
-    (_hcanonical : List.Pairwise NR.before ranges)
     (hdecomp : List.span (fun nr => decide (nr.val.lo ≤ input.val.lo)) ranges =
       (before, after))
     (hlast : before.getLast? = some predecessor)
-    (_hnogap : ¬ (predecessor.val.hi + 1 < input.val.lo))
     (hextend : predecessor.val.hi < input.val.hi)
     (hlength : cachedLength = rangesCardinality ranges) :
     (extendPredecessorCLen before after predecessor input cachedLength).cachedLength =
@@ -1132,7 +1066,7 @@ private theorem extendPredecessorCLen_preserves_cardinality
   let extended := mkNR predecessor.val.lo extendedHi
     (predecessor.property.trans (le_max_left _ _))
   let lengthAfterExtension := cachedLength +
-    extensionCardinality predecessor.val.hi input.val.hi
+    IntRange.rightExtensionCardinality predecessor.val.hi input.val.hi
   let scanned := finishDeleteExtraCLen extended after input.val.hi
     lengthAfterExtension
   have hne : before ≠ [] := by
@@ -1165,9 +1099,11 @@ private theorem extendPredecessorCLen_preserves_cardinality
     exact max_eq_right hextend.le
   have hcardExtended : extended.val.cardinality =
       predecessor.val.cardinality +
-        extensionCardinality predecessor.val.hi input.val.hi := by
-    simpa [extended, extendedHi, hmax] using
-      cardinality_extend_right predecessor input.val.hi hextend
+        IntRange.rightExtensionCardinality predecessor.val.hi input.val.hi := by
+    simpa [extended, extendedHi, hmax, mkNR] using
+      (NR.cardinality_eq_add_right_extension predecessor extended
+        (by simp [extended, mkNR])
+        (by simp [extended, extendedHi, hmax, mkNR, hextend]))
   have hcache : lengthAfterExtension =
       (rangesCardinality init + extended.val.cardinality) +
         rangesCardinality after := by
@@ -1180,11 +1116,11 @@ private theorem extendPredecessorCLen_preserves_cardinality
       (rangesCardinality init + extended.val.cardinality) +
         rangesCardinality scanned.pending +
           if input.val.hi < scanned.current.val.hi then
-            extensionCardinality input.val.hi scanned.current.val.hi
+            IntRange.rightExtensionCardinality input.val.hi scanned.current.val.hi
           else 0 := by
-    exact (finishDeleteExtraCLen_spec extended after input.val.hi
+    exact (finishDeleteExtraCLen_preserves_cached_base extended after input.val.hi
       lengthAfterExtension (rangesCardinality init + extended.val.cardinality)
-      hcache).2.2
+      hcache)
   have hendRaw := deleteExtraCLenLoop_preserves_endpoints
     extended after lengthAfterExtension
   have hend : scanned.current.val.lo = extended.val.lo ∧
@@ -1203,9 +1139,9 @@ private theorem extendPredecessorCLen_preserves_cardinality
       simp [extended, extendedHi, hmax, mkNR]
     have hcard : scanned.current.val.cardinality =
         extended.val.cardinality +
-          extensionCardinality input.val.hi scanned.current.val.hi := by
+          IntRange.rightExtensionCardinality input.val.hi scanned.current.val.hi := by
       simpa [hextendedHi] using
-        cardinality_eq_add_extension extended scanned.current hlo
+        NR.cardinality_eq_add_right_extension extended scanned.current hlo
           (by simpa [hextendedHi] using hextendFinal)
     rw [hspec, if_pos hextendFinal, hcard]
     omega
@@ -1377,7 +1313,7 @@ private theorem internalAddCLenRaw_corresponds
               (mkNR predecessor.val.lo (max predecessor.val.hi r.hi)
                 (predecessor.property.trans (le_max_left _ _)))
               (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).snd
-              (cachedLength + extensionCardinality predecessor.val.hi r.hi)
+              (cachedLength + IntRange.rightExtensionCardinality predecessor.val.hi r.hi)
             unfold finishDeleteExtraCLen
             dsimp only
             split <;> simp_all [fromNRs]
@@ -1396,54 +1332,15 @@ private theorem internalAddCLenRaw_preserves_cardinality
     split
     case h_1 =>
       rename_i _ hlast
-      have hbeforeNil :
-          (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = [] := by
-        cases hbefore :
-            (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst with
-        | nil => rfl
-        | cons head tail =>
-            rw [hbefore] at hlast
-            simp [List.getLast?] at hlast
-      have hgapLe :
-          let before := (List.span
-            (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst
-          before = [] ∨
-            ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo := by
-        left
-        exact hbeforeNil
-      have hgapStrict := nonstrict_start_gap_implies_strict_start_gap
-        s.ranges r.lo s.canonical hgapLe
       exact freshInsertCLen_preserves_cardinality
-        s.ranges input cachedLength s.canonical
-        (by simpa [input] using hgapStrict)
+        s.ranges input cachedLength
         (by simpa [RangeSetBlaze.cardinality] using hlength)
     case h_2 =>
       rename_i _ predecessor hlast
       by_cases hgap : predecessor.val.hi + 1 < r.lo
       · simp only [hgap, if_true]
-        have hne :
-            (List.span (fun nr => decide (nr.val.lo ≤ r.lo))
-              s.ranges).fst ≠ [] := by
-          intro hnil
-          have hnilTake : List.takeWhile
-              (fun nr : NR => decide (nr.val.lo ≤ r.lo)) s.ranges = [] := by
-            simpa only [List.span_eq_takeWhile_dropWhile] using hnil
-          simp [hnilTake] at hlast
-        have hgapLe :
-            let before := (List.span
-              (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst
-            before = [] ∨
-              ∃ hne : before ≠ [],
-                (before.getLast hne).val.hi + 1 < r.lo := by
-          right
-          refine ⟨hne, ?_⟩
-          rw [List.getLast_of_getLast?_eq_some hlast]
-          exact hgap
-        have hgapStrict := nonstrict_start_gap_implies_strict_start_gap
-          s.ranges r.lo s.canonical hgapLe
         exact freshInsertCLen_preserves_cardinality
-          s.ranges input cachedLength s.canonical
-          (by simpa [input] using hgapStrict)
+          s.ranges input cachedLength
           (by simpa [RangeSetBlaze.cardinality] using hlength)
       · simp only [hgap, if_false]
         by_cases hcovered : r.hi ≤ predecessor.val.hi
@@ -1454,10 +1351,9 @@ private theorem internalAddCLenRaw_preserves_cardinality
             s.ranges
             (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
             (List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
-            predecessor input cachedLength s.canonical
+            predecessor input cachedLength
             (by simp [input, List.span_eq_takeWhile_dropWhile])
             (by simpa only [List.span_eq_takeWhile_dropWhile] using hlast)
-            (by simpa [input] using hgap)
             (by simpa [input] using not_le.mp hcovered)
             (by simpa [RangeSetBlaze.cardinality] using hlength)
 

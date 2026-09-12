@@ -31,6 +31,11 @@ def toSet (r : IntRange) : Set Int := Set.Icc r.lo r.hi
 def cardinality (r : IntRange) : Nat :=
   if r.lo ≤ r.hi then Int.toNat (r.hi - r.lo + 1) else 0
 
+/-- The cardinality of the translated tail used when an inclusive interval's
+right endpoint grows from `oldEnd` to `newEnd`. -/
+def rightExtensionCardinality (oldEnd newEnd : Int) : Nat :=
+  cardinality { lo := oldEnd, hi := newEnd - 1 }
+
 @[simp] lemma cardinality_of_nonempty {r : IntRange} (h : r.lo ≤ r.hi) :
     r.cardinality = Int.toNat (r.hi - r.lo + 1) := by
   simp [cardinality, h]
@@ -135,6 +140,28 @@ lemma mergeRange_toSet_of_noGap
 abbrev NR := { r : IntRange // r.nonempty }
 
 namespace NR
+
+/-- Two nonempty ranges with the same lower endpoint differ in cardinality by
+the translated tail between their upper endpoints. -/
+lemma cardinality_eq_add_right_extension
+    (initial current : NR)
+    (hlo : current.val.lo = initial.val.lo)
+    (hextend : initial.val.hi < current.val.hi) :
+    current.val.cardinality = initial.val.cardinality +
+      IntRange.rightExtensionCardinality initial.val.hi current.val.hi := by
+  have hinitial : initial.val.lo ≤ initial.val.hi := initial.property
+  have hcurrent : current.val.lo ≤ current.val.hi := current.property
+  have htail : initial.val.hi ≤ current.val.hi - 1 := by omega
+  rw [IntRange.cardinality_of_nonempty hcurrent]
+  rw [IntRange.cardinality_of_nonempty hinitial]
+  rw [show IntRange.rightExtensionCardinality initial.val.hi current.val.hi =
+      Int.toNat (current.val.hi - 1 - initial.val.hi + 1) by
+    simp [IntRange.rightExtensionCardinality, IntRange.cardinality, htail]]
+  have htail_eq : current.val.hi - 1 - initial.val.hi + 1 =
+      current.val.hi - initial.val.hi := by omega
+  rw [hlo, htail_eq, ← Int.toNat_add (by omega) (by omega)]
+  congr 1
+  omega
 
 /-- One nonempty range comes before another with a gap if the first ends before the second starts. -/
 def before (a b : NR) : Prop := a.val.hi + 1 < b.val.lo
@@ -355,6 +382,13 @@ def rangesCardinality (rs : List NR) : Nat :=
 
 @[simp] lemma rangesCardinality_cons (r : NR) (rs : List NR) :
     rangesCardinality (r :: rs) = r.val.cardinality + rangesCardinality rs := rfl
+
+@[simp] lemma rangesCardinality_append (xs ys : List NR) :
+    rangesCardinality (xs ++ ys) =
+      rangesCardinality xs + rangesCardinality ys := by
+  induction xs with
+  | nil => simp
+  | cons x xs ih => simp [ih, Nat.add_assoc]
 
 /-- The mathematical element count represented by a range set. -/
 def cardinality (s : RangeSetBlaze) : Nat :=
