@@ -166,7 +166,8 @@ private lemma rightResidualSplit_toFunction {Value : Type*}
 
 /-- The forward scan's single recursive contract: it restores canonical shape
 and preserves the first-match function of `pending :: suffix`. -/
-private lemma scanForward_spec {Value : Type*} [DecidableEq Value]
+private lemma scanForward_preserves_canonical_and_function
+    {Value : Type*} [DecidableEq Value]
     (pending : Run Value) (suffix : List (Run Value))
     (hcanonical : Canonical suffix)
     (hlower : ∀ run ∈ suffix, pending.range.val.lo ≤ run.range.val.lo) :
@@ -342,7 +343,7 @@ private lemma scanForward_preserves_left_boundary {Value : Type*} [DecidableEq V
 
 /-- Runs in the suffix of a strict start split begin at or after the split
 point. -/
-private lemma strictStartSuffix_lower_bound {Value : Type*}
+private lemma strict_start_split_suffix_lower_bound {Value : Type*}
     (runs : List (Run Value)) (start : Int) (hcanonical : Canonical runs) :
     ∀ run ∈ (List.span (fun candidate =>
       decide (candidate.range.val.lo < start)) runs).snd,
@@ -548,7 +549,8 @@ private def internalAddCMapRuns {Value : Type*} [DecidableEq Value]
 remaining composition obligation: it derives the predecessor/suffix facts from
 the canonical input and dispatches each executable branch to the local
 residual and forward-scan contracts. -/
-private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
+private theorem internalAddCMapRuns_preserves_canonical_and_overwrite
+    {Value : Type*} [DecidableEq Value]
     (runs : List (Run Value)) (input : IntRange) (value : Value)
     (hnonempty : input.lo ≤ input.hi) (hcanonical : Canonical runs) :
     let output := internalAddCMapRuns runs input value hnonempty
@@ -573,9 +575,10 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
     have hcanonicalAfter : Canonical after := by simpa [hafterRuns] using hcanonical
     have hlowerAfter : ∀ run ∈ after, input.lo ≤ run.range.val.lo := by
       simpa [split, after] using
-        strictStartSuffix_lower_bound runs input.lo hcanonical
-    have hscan := scanForward_spec inserted after hcanonicalAfter (by
-      simpa [inserted] using hlowerAfter)
+        strict_start_split_suffix_lower_bound runs input.lo hcanonical
+    have hscan :=
+      scanForward_preserves_canonical_and_function inserted after
+        hcanonicalAfter (by simpa [inserted] using hlowerAfter)
     refine ⟨hscan.1, hscan.2.trans ?_⟩
     simpa [inserted, hafterRuns] using
       insertedSuffix_toFunction after input value hnonempty hlowerAfter
@@ -597,7 +600,7 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
     have hcross : ∀ left ∈ before, ∀ right ∈ after, Run.before left right :=
       (List.pairwise_append.mp hwholeCanonical).2.2
     have hlowerAfter : ∀ run ∈ after, input.lo ≤ run.range.val.lo := by
-      simpa [after] using strictStartSuffix_lower_bound runs input.lo hcanonical
+      simpa [after] using strict_start_split_suffix_lower_bound runs input.lo hcanonical
     have hprevMem : prev ∈ before :=
       List.mem_of_mem_getLast? (by simp [hprev])
     have hprevStart : prev.range.val.lo < input.lo := by
@@ -650,10 +653,12 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
         · simp only [hcovered, ↓reduceIte]
           have hextends : prev.range.val.hi < input.hi := by omega
           let merged := mergeForward prev inserted
-          have hscan := scanForward_spec merged after hcanonicalAfter (by
-            intro run hrun
-            simpa [merged, mergeForward] using
-              (hprevStart.le.trans (hlowerAfter run hrun)))
+          have hscan :=
+            scanForward_preserves_canonical_and_function merged after
+              hcanonicalAfter (by
+                intro run hrun
+                simpa [merged, mergeForward] using
+                  (hprevStart.le.trans (hlowerAfter run hrun)))
           have hinitBeforeScan : ∀ left ∈ before.dropLast,
               ∀ right ∈ scanForward merged after, Run.before left right := by
             intro left hleft
@@ -692,8 +697,9 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
             unfold IntRange.NR.before
             change prev.range.val.hi + 1 < input.lo
             omega
-        have hscan := scanForward_spec inserted after hcanonicalAfter (by
-          simpa [inserted] using hlowerAfter)
+        have hscan :=
+          scanForward_preserves_canonical_and_function inserted after
+            hcanonicalAfter (by simpa [inserted] using hlowerAfter)
         have hprevBeforeScan := scanForward_preserves_left_boundary
           prev inserted after hprevInserted hprevAfter
         have hbeforeScan : ∀ left ∈ before,
@@ -800,8 +806,9 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
           simpa [left, residual, inserted, hfull] using hall
         · simp only [hextends, ↓reduceDIte]
           let left := leftResidualBefore input.lo prev hprevStart
-          have hscan := scanForward_spec inserted after hcanonicalAfter (by
-            simpa [inserted] using hlowerAfter)
+          have hscan :=
+            scanForward_preserves_canonical_and_function inserted after
+              hcanonicalAfter (by simpa [inserted] using hlowerAfter)
           have hleftInserted : Run.before left inserted := by
             constructor
             · simp [left, leftResidualBefore, inserted, Run.disjointBefore]
@@ -870,8 +877,9 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
             omega
           · intro hvalue
             exact (hsame (by simpa [inserted] using hvalue)).elim
-        have hscan := scanForward_spec inserted after hcanonicalAfter (by
-          simpa [inserted] using hlowerAfter)
+        have hscan :=
+          scanForward_preserves_canonical_and_function inserted after
+            hcanonicalAfter (by simpa [inserted] using hlowerAfter)
         have hprevBeforeScan := scanForward_preserves_left_boundary
           prev inserted after hprevInserted hprevAfter
         have hbeforeScan : ∀ left ∈ before,
@@ -914,7 +922,8 @@ def internalAddCMap {Value : Type*} [DecidableEq Value]
     have hnonempty : input.lo ≤ input.hi := by omega
     let output := internalAddCMapRuns map.runs input value hnonempty
     refine ⟨output, ?_⟩
-    exact (internalAddCMapRuns_spec map.runs input value hnonempty map.canonical).1
+    exact (internalAddCMapRuns_preserves_canonical_and_overwrite
+      map.runs input value hnonempty map.canonical).1
 
 /-- Production-shaped insertion has exact pointwise overwrite semantics. -/
 theorem internalAddCMap_toFunction {Value : Type*} [DecidableEq Value]
@@ -925,6 +934,7 @@ theorem internalAddCMap_toFunction {Value : Type*} [DecidableEq Value]
   split <;> rename_i h
   · exact (overwrite_eq_of_hi_lt_lo map.toFunction input value h).symm
   · dsimp only [toFunction]
-    exact (internalAddCMapRuns_spec map.runs input value (by omega) map.canonical).2
+    exact (internalAddCMapRuns_preserves_canonical_and_overwrite
+      map.runs input value (by omega) map.canonical).2
 
 end RangeMapBlaze

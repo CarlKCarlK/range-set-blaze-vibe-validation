@@ -114,7 +114,7 @@ open Classical
 def internalAddA (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   if hr : r.nonempty then
     let curr : IntRange.NR := ⟨r, hr⟩
-    let ⟨ys, hpair, _, _⟩ := insert curr s.ranges s.ok
+    let ⟨ys, hpair, _, _⟩ := insert curr s.ranges s.canonical
     ⟨ys, hpair⟩
   else s
 
@@ -125,7 +125,7 @@ theorem internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
   by_cases hr : r.nonempty
   ·
     -- Inserted case: reduce to the list-level `insert` lemma.
-    set res := insert ⟨r, hr⟩ s.ranges s.ok with hInsert
+    set res := insert ⟨r, hr⟩ s.ranges s.canonical with hInsert
     rcases res with ⟨ys, hpair, hset, hmon⟩
     have hNotEmpty : ¬ r.empty := by
       simpa [IntRange.nonempty_iff_not_empty] using hr

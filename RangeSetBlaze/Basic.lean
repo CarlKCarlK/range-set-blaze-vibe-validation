@@ -321,10 +321,10 @@ open IntRange (NR)
 open scoped IntRange.NR
 open IntRange.NR
 
-/-- A list of nonempty ranges that are sorted and pairwise disjoint with gaps. -/
+/-- A canonical list of nonempty ranges, ordered with genuine gaps. -/
 structure RangeSetBlaze where
   ranges : List NR
-  ok : List.Pairwise (· ≺ ·) ranges
+  canonical : List.Pairwise (· ≺ ·) ranges
   deriving Repr
 
 namespace RangeSetBlaze

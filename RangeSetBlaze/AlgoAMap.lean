@@ -225,7 +225,8 @@ private lemma mergeTouchingRuns_before {Value : Type*}
 
 /-- Coalescing has one contract: on ordered, nonoverlapping input it produces a
 canonical representation without changing the represented partial function. -/
-private lemma coalesceRuns_spec {Value : Type*} [DecidableEq Value]
+private lemma coalesceRuns_preserves_canonical_and_function
+    {Value : Type*} [DecidableEq Value]
     (runs : List (Run Value))
     (hordered : List.Pairwise Run.disjointBefore runs) :
     Canonical (coalesceRuns runs) ∧
@@ -415,7 +416,7 @@ def internalAddAMap {Value : Type*} [DecidableEq Value]
       map.canonical.imp fun hbefore => hbefore.1
     let runs := coalesceRuns (trimAndInsert map.runs input value hnonempty)
     refine ⟨runs, ?_⟩
-    exact (coalesceRuns_spec _
+    exact (coalesceRuns_preserves_canonical_and_function _
       (trimAndInsert_pairwise map.runs input value hnonempty hordered)).1
 
 /-- Algo A has exactly the pointwise semantics of overwriting the input
@@ -429,7 +430,7 @@ theorem internalAddAMap_toFunction {Value : Type*} [DecidableEq Value]
   · dsimp only [toFunction]
     have hordered : List.Pairwise Run.disjointBefore map.runs :=
       map.canonical.imp fun hbefore => hbefore.1
-    rw [(coalesceRuns_spec _
+    rw [(coalesceRuns_preserves_canonical_and_function _
       (trimAndInsert_pairwise map.runs input value (by omega) hordered)).2]
     apply trimAndInsert_toFunction
 

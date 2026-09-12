@@ -172,14 +172,14 @@ needed.
 
 ```mermaid
 flowchart BT
-  MF[mergeForward_toFunction] --> SF[scanForward_spec]
+  MF[mergeForward_toFunction] --> SF[scanForward_preserves_canonical_and_function]
   EC[sameValueExactCover_toFunction] --> SF
   CD[coveredRunDeletion_toFunction] --> SF
   RR[rightResidualSplit_toFunction] --> SF
 
   LB[strict split suffix lower bound] --> INS[insertedSuffix_toFunction]
   NONE[suffix absent below lower bound] --> INS
-  LEFT[prepend_left_of_overwrite] --> TOP[internalAddCMapRuns_spec]
+  LEFT[prepend_left_of_overwrite] --> TOP[internalAddCMapRuns_preserves_canonical_and_overwrite]
   REPL[replacePredecessor_toFunction] --> TOP
   MERGEP[mergePredecessor_toFunction] --> TOP
   BOUND[scanForward_preserves_left_boundary] --> TOP
@@ -191,10 +191,12 @@ flowchart BT
   TOP -->|conjunct .2| PUB[internalAddCMap_toFunction]
 ```
 
-The combined `scanForward_spec` deliberately proves canonicality and function
-preservation in one induction, since every scan branch determines both facts.
+The combined `scanForward_preserves_canonical_and_function` deliberately proves
+canonicality and function preservation in one induction, since every scan
+branch determines both facts.
 At the top level, predecessor and prefix lemmas connect that scan contract back
-to the complete old list.  The two projections of `internalAddCMapRuns_spec`
+to the complete old list.  The two projections of
+`internalAddCMapRuns_preserves_canonical_and_overwrite`
 then serve different consumers: `.1` justifies constructing a canonical map;
 `.2` proves the public semantic theorem.
 

@@ -49,8 +49,8 @@ private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
 
 /-- Safe constructor when you already have the invariant. -/
 private def fromNRs (xs : List NR)
-  (hok : List.Pairwise NR.before xs) : RangeSetBlaze :=
-  { ranges := xs, ok := hok }
+  (hcanonical : List.Pairwise NR.before xs) : RangeSetBlaze :=
+  { ranges := xs, canonical := hcanonical }
 
 /-- Scan forward from `current`, merging touching or overlapping pending ranges
 and stopping at the first range separated by a true gap. -/
@@ -88,23 +88,23 @@ private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (Li
   deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
   simp [deleteExtraNRs_loop, h]
 
-/-- Set-level description of a single merge step inside `deleteExtraNRs`. -/
-private lemma merge_step_sets
+/-- Set-level description of a single forward merge step. -/
+private lemma mergeForward_toSet
     (current next : NR)
     (horder : current.val.lo ≤ next.val.lo)
     (htouch : ¬ (current.val.hi + 1 < next.val.lo)) :
-    current.val.toSet ∪ next.val.toSet =
-      (mkNR current.val.lo (max current.val.hi next.val.hi)
+    (mkNR current.val.lo (max current.val.hi next.val.hi)
         (by
           have hc : current.val.lo ≤ current.val.hi := current.property
           have : current.val.hi ≤ max current.val.hi next.val.hi :=
             le_max_left _ _
-          exact le_trans hc this)).val.toSet := by
+          exact le_trans hc this)).val.toSet =
+      current.val.toSet ∪ next.val.toSet := by
   have hmergeable : NR.mergeable current next :=
     NR.mergeable_of_startsBefore_of_not_before
       (show NR.startsBefore current next from horder) htouch
   simpa [NR.glue, IntRange.mergeRange, mkNR, min_eq_left horder] using
-    (NR.glue_sets current next hmergeable).symm
+    NR.glue_sets current next hmergeable
 
 /-- Locate the first range not strictly before `start`, extend its upper
 endpoint through `stop`, and merge any following ranges that no longer have a
@@ -181,7 +181,7 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
         have hmerged_toSet :
             merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
           simpa [hmerged_def] using
-            (merge_step_sets current next horder htouch).symm
+            (mergeForward_toSet current next horder htouch)
         have horder_out :
             List.Pairwise NR.before (next :: tail) →
             List.Pairwise NR.before
@@ -492,11 +492,11 @@ private def insertAtStrictStartGap (s : RangeSetBlaze) (r : IntRange)
   else
     let hle : r.lo ≤ r.hi := not_lt.mp hempty
     let xs := s.ranges
-    have hok : List.Pairwise NR.before
+    have hcanonical : List.Pairwise NR.before
         (internalAdd2NRs xs r.lo r.hi hle) :=
       (internalAdd2NRs_preserves_order_and_union
-        xs r.lo r.hi hle s.ok hgap_lt).1
-    fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
+        xs r.lo r.hi hle s.canonical hgap_lt).1
+    fromNRs (internalAdd2NRs xs r.lo r.hi hle) hcanonical
 
 /-- Insert through the non-strict predecessor split after converting its gap
 evidence to the strict insertion boundary. -/
@@ -507,7 +507,7 @@ private def insertAtNonstrictStartGap (s : RangeSetBlaze) (r : IntRange)
       before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
     RangeSetBlaze :=
   insertAtStrictStartGap s r
-    (nonstrict_start_gap_implies_strict_start_gap s.ranges r.lo s.ok hgap_le)
+    (nonstrict_start_gap_implies_strict_start_gap s.ranges r.lo s.canonical hgap_le)
 
 /-- The extend-predecessor helper has two proof clients: its executable
 wrapper needs the ordering invariant, while the correctness projection used
@@ -552,13 +552,13 @@ private lemma extend_predecessor_preserves_order_and_union
         have h2 : s.ranges.dropWhile p = after := by
           simpa using congrArg Prod.snd h_span
         rw [h1, h2]
-  have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
+  have hcanonicalDecomp : List.Pairwise NR.before (before ++ after) := by
     rw [← h_s_decomp]
-    exact s.ok
+    exact s.canonical
   have hpw_before : List.Pairwise NR.before before :=
-    (List.pairwise_append.mp h_ok_decomp).1
+    (List.pairwise_append.mp hcanonicalDecomp).1
   have hpw_after : List.Pairwise NR.before after :=
-    (List.pairwise_append.mp h_ok_decomp).2.1
+    (List.pairwise_append.mp hcanonicalDecomp).2.1
   have heq : before.getLast hne = prev :=
     List.getLast_of_getLast?_eq_some hLast
   have h_before_decomp : before = init ++ [prev] := by
@@ -572,7 +572,7 @@ private lemma extend_predecessor_preserves_order_and_union
     (List.pairwise_append.mp hpw_before_prev).1
   have h_prev_before_after : ∀ nr ∈ after, NR.before prev nr := by
     intro nr hmem
-    exact NR.pairwise_before_prefix_last_suffix h_ok_decomp hLast nr hmem
+    exact NR.pairwise_before_prefix_last_suffix hcanonicalDecomp hLast nr hmem
   let start' := prev.val.lo
   have h_extended_lo : extended.val.lo = start' := by
     simp only [extended, mkNR, start']
@@ -618,7 +618,7 @@ private lemma extend_predecessor_preserves_order_and_union
     have htouch : ¬ (prev.val.hi + 1 < inserted.val.lo) := by
       simpa [inserted, mkNR] using hNoGap
     simpa [extended, extendedHi, inserted, mkNR] using
-      (merge_step_sets prev inserted horder htouch).symm
+      (mergeForward_toSet prev inserted horder htouch)
   have h_s_toSet : s.toSet = rangesToSet init ∪ prev.val.toSet ∪ rangesToSet after := by
     have h_s_ranges : s.toSet = rangesToSet s.ranges := by
       unfold RangeSetBlaze.toSet
@@ -730,7 +730,7 @@ private theorem insertAtStrictStartGap_toSet
   · simp [insertAtStrictStartGap, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
   · simpa [insertAtStrictStartGap, hempty, fromNRs, RangeSetBlaze.toSet, mkNR] using
       (internalAdd2NRs_preserves_order_and_union
-        s.ranges r.lo r.hi (not_lt.mp hempty) s.ok hgap_lt).2
+        s.ranges r.lo r.hi (not_lt.mp hempty) s.canonical hgap_lt).2
 
 /-- Correctness of insertion through the non-strict predecessor boundary. -/
 private theorem insertAtNonstrictStartGap_toSet

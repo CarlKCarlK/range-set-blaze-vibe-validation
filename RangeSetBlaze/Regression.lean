@@ -21,8 +21,8 @@ private def testNR (lo hi : Int) (h : lo ≤ hi := by omega) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
 private def testSet (ranges : List NR)
-    (ok : List.Pairwise NR.before ranges := by native_decide) : RangeSetBlaze :=
-  ⟨ranges, ok⟩
+    (canonical : List.Pairwise NR.before ranges := by native_decide) : RangeSetBlaze :=
+  ⟨ranges, canonical⟩
 
 private def sameAcrossAlgorithms (s : RangeSetBlaze) (r : IntRange) : Bool :=
   (internalAddA s r).ranges == (internalAddB s r).ranges &&

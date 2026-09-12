@@ -437,7 +437,7 @@ def internalAddD (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   else
     let input : NR := ⟨r, not_lt.mp hempty⟩
     let result := internalAddDNRs s.ranges input
-    ⟨result, (internalAddDNRs_preserves_order_and_union s.ranges input s.ok).1⟩
+    ⟨result, (internalAddDNRs_preserves_order_and_union s.ranges input s.canonical).1⟩
 
 /-- Algo D's set-level correctness target. -/
 theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
@@ -445,7 +445,7 @@ theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
   by_cases hempty : r.hi < r.lo
   · simp [internalAddD, hempty, IntRange.toSet_eq_empty_of_hi_lt_lo hempty]
   · let input : NR := ⟨r, not_lt.mp hempty⟩
-    have hspec := internalAddDNRs_preserves_order_and_union s.ranges input s.ok
+    have hspec := internalAddDNRs_preserves_order_and_union s.ranges input s.canonical
     simpa [internalAddD, hempty, RangeSetBlaze.toSet, input] using hspec.2
 
 end RangeSetBlaze

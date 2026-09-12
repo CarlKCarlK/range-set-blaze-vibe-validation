@@ -36,12 +36,12 @@ mutual
           before_ok := by intro _ hb; cases hb
           touch_ok := by intro _ hb; cases hb
           after_ok := by intro _ hb; cases hb }
-    | x :: xs, ok =>
-        let head := List.pairwise_cons.1 ok
-        let okTail := head.2
+    | x :: xs, hcanonical =>
+        let head := List.pairwise_cons.1 hcanonical
+        let hcanonicalTail := head.2
         match NR.Rel3.classify x curr with
         | NR.Rel3.left hx =>
-            let tail := splitBefore curr xs okTail
+            let tail := splitBefore curr xs hcanonicalTail
             { before := x :: tail.before
               touching := tail.touching
               after := tail.after
@@ -62,9 +62,9 @@ mutual
               touch_ok := tail.touch_ok
               after_ok := tail.after_ok }
         | NR.Rel3.mergeable hx =>
-            splitTouching curr x (NR.mergeable_comm.mp hx) xs ok
+            splitTouching curr x (NR.mergeable_comm.mp hx) xs hcanonical
         | NR.Rel3.right hx =>
-            splitAfter curr x hx xs ok
+            splitAfter curr x hx xs hcanonical
 
   private def splitTouching (curr : NR) (x : NR) (hx : NR.mergeable curr x) :
       (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
@@ -80,11 +80,11 @@ mutual
             have ht' : t = x := by simpa using ht
             simpa [ht'] using hx
           after_ok := by intro _ hb; cases hb }
-    | y :: ys, ok =>
-        have hx_tail := (List.pairwise_cons.1 ok).1
-        have okTail :
+    | y :: ys, hcanonical =>
+        have hx_tail := (List.pairwise_cons.1 hcanonical).1
+        have hcanonicalTail :
             List.Pairwise (· ≺ ·) (y :: ys) :=
-          (List.pairwise_cons.1 ok).2
+          (List.pairwise_cons.1 hcanonical).2
         have xBeforeY : x ≺ y := hx_tail _ (by simp)
         match NR.Rel3.classify y curr with
         | NR.Rel3.left hy =>
@@ -92,7 +92,7 @@ mutual
               hx.2 (NR.before_trans xBeforeY hy)
             False.elim hFalse
         | NR.Rel3.mergeable hy =>
-            let tail := splitTouching curr y (NR.mergeable_comm.mp hy) ys okTail
+            let tail := splitTouching curr y (NR.mergeable_comm.mp hy) ys hcanonicalTail
             { before := []
               touching := x :: tail.touching
               after := tail.after
@@ -148,7 +148,7 @@ mutual
                     exact tail.touch_ok htMem
               after_ok := tail.after_ok }
         | NR.Rel3.right hy =>
-            let tail := splitAfter curr y hy ys okTail
+            let tail := splitAfter curr y hy ys hcanonicalTail
             { before := []
               touching := [x]
               after := tail.after
@@ -213,15 +213,15 @@ mutual
             intro a ha
             have ha' : a = x := by simpa using ha
             simpa [ha'] using hx }
-    | y :: ys, ok =>
-        have hx_tail := (List.pairwise_cons.1 ok).1
-        have okTail :
+    | y :: ys, hcanonical =>
+        have hx_tail := (List.pairwise_cons.1 hcanonical).1
+        have hcanonicalTail :
             List.Pairwise (· ≺ ·) (y :: ys) :=
-          (List.pairwise_cons.1 ok).2
+          (List.pairwise_cons.1 hcanonical).2
         have xBeforeY : x ≺ y := hx_tail _ (by simp)
         match NR.Rel3.classify y curr with
         | NR.Rel3.right hy =>
-            let tail := splitAfter curr y hy ys okTail
+            let tail := splitAfter curr y hy ys hcanonicalTail
             { before := []
               touching := []
               after := x :: tail.after
@@ -290,9 +290,9 @@ end
 
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
 private def splitRanges (curr : NR) (xs : List NR)
-    (ok : List.Pairwise (· ≺ ·) xs) :
+    (hcanonical : List.Pairwise (· ≺ ·) xs) :
     SplitWitness curr xs :=
-  splitBefore curr xs ok
+  splitBefore curr xs hcanonical
 
 /-- Fold `NR.glue` across a list, starting from `curr`. -/
 private def glueMany (curr : NR) (ts : List NR) : NR :=
@@ -341,18 +341,18 @@ private lemma buildSplit_sets
 
 /-- Everything in `before` is before everything in `touching`. -/
 private lemma split_before_before_touch
-    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃t⦄, t ∈ w.touching → b ≺ t := by
-  have ok' :
+  have hcanonicalFull :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using ok
-  have ok'' :
+    simpa [w.order] using hcanonical
+  have hcanonicalNested :
       List.Pairwise (· ≺ ·)
         (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using ok'
-  obtain ⟨_, ok_tail, cross_before⟩ :=
-    List.pairwise_append.1 ok''
+    simpa [List.append_assoc] using hcanonicalFull
+  obtain ⟨_, hcanonicalTail, cross_before⟩ :=
+    List.pairwise_append.1 hcanonicalNested
   intro b hb t ht
   have ht' : t ∈ w.touching ++ w.after := by
     simp [List.mem_append, ht]
@@ -360,18 +360,18 @@ private lemma split_before_before_touch
 
 /-- Everything in `before` is before everything in `after`. -/
 private lemma split_before_before_after
-    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃a⦄, a ∈ w.after → b ≺ a := by
-  have ok' :
+  have hcanonicalFull :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using ok
-  have ok'' :
+    simpa [w.order] using hcanonical
+  have hcanonicalNested :
       List.Pairwise (· ≺ ·)
         (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using ok'
-  obtain ⟨_, ok_tail, cross_before⟩ :=
-    List.pairwise_append.1 ok''
+    simpa [List.append_assoc] using hcanonicalFull
+  obtain ⟨_, hcanonicalTail, cross_before⟩ :=
+    List.pairwise_append.1 hcanonicalNested
   intro b hb a ha
   have ha' : a ∈ w.touching ++ w.after := by
     simp [List.mem_append, ha]
@@ -379,42 +379,42 @@ private lemma split_before_before_after
 
 /-- Everything in `touching` is before everything in `after`. -/
 private lemma split_touch_before_after
-    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃t⦄, t ∈ w.touching → ∀ ⦃a⦄, a ∈ w.after → t ≺ a := by
-  have ok' :
+  have hcanonicalFull :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using ok
-  have ok'' :
+    simpa [w.order] using hcanonical
+  have hcanonicalNested :
       List.Pairwise (· ≺ ·)
         (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using ok'
-  obtain ⟨_, ok_tail, _⟩ :=
-    List.pairwise_append.1 ok''
+    simpa [List.append_assoc] using hcanonicalFull
+  obtain ⟨_, hcanonicalTail, _⟩ :=
+    List.pairwise_append.1 hcanonicalNested
   obtain ⟨_, _, cross_touch⟩ :=
-    List.pairwise_append.1 ok_tail
+    List.pairwise_append.1 hcanonicalTail
   intro t ht a ha
   exact cross_touch (a := t) (b := a) ht ha
 
 /-- Legality for Algo B rebuild:
 `before ++ [glueMany curr touching] ++ after` is pairwise `(· ≺ ·)`. -/
 private lemma buildSplit_pairwise
-    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     List.Pairwise (· ≺ ·)
       (buildSplit curr w.before w.touching w.after) := by
   set g := glueMany curr w.touching with hg
-  have ok_full :
+  have hcanonicalFull :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using ok
+    simpa [w.order] using hcanonical
   have h_split1 :=
-    List.pairwise_append.1 (by simpa [List.append_assoc] using ok_full)
-  have ok_before : List.Pairwise (· ≺ ·) w.before := h_split1.1
-  have ok_touch_after :
+    List.pairwise_append.1 (by simpa [List.append_assoc] using hcanonicalFull)
+  have hcanonicalBefore : List.Pairwise (· ≺ ·) w.before := h_split1.1
+  have hcanonicalTouchAfter :
       List.Pairwise (· ≺ ·) (w.touching ++ w.after) := h_split1.2.1
-  have h_split2 := List.pairwise_append.1 ok_touch_after
-  have ok_touching : List.Pairwise (· ≺ ·) w.touching := h_split2.1
-  have ok_after : List.Pairwise (· ≺ ·) w.after := h_split2.2.1
+  have h_split2 := List.pairwise_append.1 hcanonicalTouchAfter
+  have hcanonicalTouching : List.Pairwise (· ≺ ·) w.touching := h_split2.1
+  have hcanonicalAfter : List.Pairwise (· ≺ ·) w.after := h_split2.2.1
   have h_before_glue :
       ∀ b ∈ w.before, b ≺ g := by
     intro b hb
@@ -424,7 +424,7 @@ private lemma buildSplit_pairwise
       intro t ht
       exact
         split_before_before_touch
-          (curr := curr) (xs := xs) ok w hb ht
+          (curr := curr) (xs := xs) hcanonical w hb ht
     have hb_glue_aux :
         ∀ (acc : NR) (ts : List NR),
             (∀ t ∈ ts, b ≺ t) →
@@ -458,7 +458,7 @@ private lemma buildSplit_pairwise
       intro t ht
       exact
         split_touch_before_after
-          (curr := curr) (xs := xs) ok w ht ha
+          (curr := curr) (xs := xs) hcanonical w ht ha
     have h_aux :
         ∀ (acc : NR) (ts : List NR),
             (∀ t ∈ ts, t ≺ a) →
@@ -487,7 +487,7 @@ private lemma buildSplit_pairwise
   have pair_before_glue :
       List.Pairwise (· ≺ ·) (w.before ++ [g]) :=
     List.pairwise_append.mpr
-      ⟨ok_before,
+      ⟨hcanonicalBefore,
       List.pairwise_singleton (R := (· ≺ ·)) _,
         by
           intro b hb y hy
@@ -497,13 +497,13 @@ private lemma buildSplit_pairwise
       List.Pairwise (· ≺ ·) ((w.before ++ [g]) ++ w.after) :=
     List.pairwise_append.mpr
       ⟨pair_before_glue,
-        ok_after,
+        hcanonicalAfter,
         by
           intro x hx a ha
           rcases List.mem_append.1 hx with hx | hx
           · exact
               split_before_before_after
-                (curr := curr) (xs := xs) ok w hx ha
+                (curr := curr) (xs := xs) hcanonical w hx ha
           · rcases List.mem_singleton.1 hx with rfl
             exact h_glue_after a ha⟩
   simpa [buildSplit, hg, List.append_assoc] using pair_final
@@ -512,13 +512,13 @@ private lemma buildSplit_pairwise
 def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   if hr : r.nonempty then
     let curr : NR := ⟨r, hr⟩
-    let w := splitRanges curr s.ranges s.ok
+    let w := splitRanges curr s.ranges s.canonical
     { ranges := buildSplit curr w.before w.touching w.after
-      ok :=
+      canonical :=
         buildSplit_pairwise
           (curr := curr)
           (xs := s.ranges)
-          (ok := s.ok)
+          (hcanonical := s.canonical)
           (w := w) }
   else
     s
@@ -529,7 +529,7 @@ theorem internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
   by_cases hr : r.nonempty
   · -- Nonempty range: unfold and compare via list sets.
     set curr : NR := ⟨r, hr⟩
-    set w := splitRanges curr s.ranges s.ok
+    set w := splitRanges curr s.ranges s.canonical
     have hbuild :
         rangesToSet (buildSplit curr w.before w.touching w.after) =
           curr.val.toSet ∪
