@@ -6,8 +6,9 @@ import RangeSetBlaze.AlgoCMap
 import RangeSetBlaze.AlgoB
 import RangeSetBlaze.AlgoC
 import RangeSetBlaze.AlgoD
+import RangeSetBlaze.AlgoDMap
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
 export RangeSetBlaze (toSet internalAddA internalAddB internalAddC internalAddD)
-export RangeMapBlaze (internalAddAMap internalAddCMap)
+export RangeMapBlaze (internalAddAMap internalAddCMap internalAddDMap)
