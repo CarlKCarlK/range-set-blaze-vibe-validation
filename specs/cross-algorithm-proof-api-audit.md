@@ -1,6 +1,6 @@
 # Cross-algorithm proof API audit
 
-Date: 2026-09-11
+Date: 2026-09-12
 
 This audit compares the proof-facing API for set Algo A and Algo C, map
 AlgoAMap and AlgoCMap, and the stable concepts likely to matter to a future
@@ -11,17 +11,21 @@ cursor-based AlgoDMap. It does not implement AlgoDMap or add cached lengths.
 The audit began from a clean `main` at
 `3c6600fcec0e2ee28df67a2b83461882c2c9f51d` (`Clean up and document AlgoCMap
 correctness proof`).
+The file-organization extension began from the subsequently clean
+`cf44c63e8edcb3ed8ebba18effbc84a8abaacdfa` (`cross-algorithm API cleanup
+complete → start AlgoDMap.`).
 
 - Set Algo A is a direct fold over canonical range insertion. Its public
-  endpoint is `RangeSetBlaze.ofListA_eq`.
+  endpoint is `RangeSetBlaze.internalAddA_toSet`.
 - Set Algo C separates around the insertion point, merges a forward run, and
   reconstructs the represented set. Its public endpoint is
-  `RangeSetBlaze.ofListC_eq`.
+  `RangeSetBlaze.internalAddC_toSet`.
 - AlgoAMap is a list-oriented reference algorithm using predecessor residuals,
   insertion, coalescing, and overwrite semantics. Its public endpoint is
-  `RangeMapBlaze.ofListAMap_eq`.
+  `RangeMapBlaze.internalAddAMap_toFunction`.
 - AlgoCMap implements the Rust-shaped predecessor classification and forward
-  scan over runs. Its public endpoint is `RangeMapBlaze.ofListCMap_eq`.
+  scan over runs. Its public endpoint is
+  `RangeMapBlaze.internalAddCMap_toFunction`.
 - The anticipated AlgoDMap is the mutable cursor form of the map operation. It
   should reuse the domain vocabulary, but its cursor ownership and mutation
   invariants should remain local until there is executable Lean code to prove.
@@ -70,6 +74,31 @@ result shapes, and a cursor implementation may add a third shape. Extraction
 should wait until AlgoDMap supplies a genuine second use of exactly the same
 mathematical statement.
 
+### File and module organization
+
+The flat naming convention should remain. It makes the available set variants
+(`AlgoA` through `AlgoD`) and map variants (`AlgoAMap`, `AlgoCMap`, and future
+`AlgoDMap`) visible without directory or import churn.
+
+| File | Current role | Name/location good? | Action |
+| --- | --- | --- | --- |
+| `RangeSetBlaze/Basic.lean` | Shared interval, set, and map domain/representation API | Yes; map runs reuse `IntRange` and `NR`, and the file contains no algorithm control flow | Keep |
+| `RangeSetBlaze/AlgoA.lean` | Set reference insertion | Yes | Keep |
+| `RangeSetBlaze/AlgoAMap.lean` | Map reference insertion | Yes | Keep |
+| `RangeSetBlaze/AlgoB.lean` | Set Algo B | Yes | Keep |
+| `RangeSetBlaze/AlgoC.lean` | Production-shaped set insertion | Yes | Keep |
+| `RangeSetBlaze/AlgoCMap.lean` | Production-shaped map insertion | Yes | Keep |
+| `RangeSetBlaze/AlgoD.lean` | Proved cursor-gap **set** insertion | Yes; `D` denotes the set variant, not the anticipated map variant | Keep |
+| `RangeSetBlaze/Regression.lean` | Compile-time concrete and cross-set-algorithm regression checks | Yes; deliberately outside algorithm modules | Keep |
+| `RangeSetBlazeLean2/Basic.lean` | One-line Lake-init placeholder (`hello`) | No; project-history scaffold with no consumer | Remove |
+| `RangeSetBlazeLean2.lean` | Aggregator for the placeholder module | No; not the configured `RangeSetBlaze` library | Remove |
+| `RangeSetBlaze.lean` | Library aggregator and selected convenience exports | Yes; intentionally excludes regression helpers | Keep |
+| `Main.lean` | Small executable demonstration | Yes; it is the configured executable root, not library API | Keep |
+
+The two `RangeSetBlazeLean2` files existed unchanged since the initial Lake
+scaffold commit and were not imported by `RangeSetBlaze`, `Main`, or any proof
+module. They were removed. No `Set/` or `Map/` subdirectories are warranted.
+
 ## Public API review
 
 Before and after, the library has 42 public and 52 private lemmas/theorems.
@@ -114,9 +143,10 @@ The theorems surrounding executable helpers may still use semantic names.
 The historical AlgoCMap milestone document was left historical. The current
 human-readable proof sketch was updated to the current theorem map.
 
-No declaration was removed, privatized, moved, or newly exported. That is an
-intentional audit result: the low-use public items are reusable mathematics,
-whereas the algorithm-specific scaffolding was already private.
+No proof declaration was removed, privatized, moved, or newly exported. The
+only removed declaration was the unrelated scaffold `hello` definition. This
+is an intentional audit result: the low-use public items are reusable
+mathematics, whereas the algorithm-specific scaffolding was already private.
 
 ## Shared theorem families
 
@@ -159,11 +189,11 @@ mathematics.
 | 2 | AlgoAMap/AlgoCMap `_spec` preservation contracts | **Implemented:** semantic theorem names expose the proof architecture | No proof reduction; low risk | High |
 | 3 | Algo C `merge_step_sets` | **Implemented:** name and orient it as `mergeForward_toSet` | Two caller simplifications; low risk | Low |
 | 4 | Basic/AlgoCMap strict-start suffix names | **Implemented:** normalize vocabulary while retaining distinct statements | Vocabulary only; low risk | Medium |
-| 5 | AlgoCMap scan canonicality and left-boundary inductions | **Deferred:** consider combining only if cursor proof needs a joint invariant | Possible one traversal; medium/high risk | Medium |
-| 6 | AlgoAMap/AlgoCMap predecessor residual facts | **Deferred:** extract only after an identical AlgoDMap statement appears | Potential small reuse; medium risk | High |
-| 7 | `NR` and `Run` suffix lower-bound lemmas | **Deferred:** generic span abstraction costs more than two short theorems | Likely negative reduction; medium risk | Low/medium |
-| 8 | Four final correctness theorem root exports | **Deferred:** decide with public import/export policy | No proof reduction; low risk | Low |
-| 9 | Public zero/one-use facts in `Basic.lean` | **Rejected:** keep stable mathematical concepts public | Hiding saves no proof; medium API cost | Medium |
+| 5 | `RangeSetBlazeLean2` scaffold modules | **Implemented:** remove unused historical tree and `hello` definition | Two files and one irrelevant definition; low risk | Low |
+| 6 | AlgoCMap scan canonicality and left-boundary inductions | **Deferred:** consider combining only if cursor proof needs a joint invariant | Possible one traversal; medium/high risk | Medium |
+| 7 | AlgoAMap/AlgoCMap predecessor residual facts | **Deferred:** extract only after an identical AlgoDMap statement appears | Potential small reuse; medium risk | High |
+| 8 | `NR` and `Run` suffix lower-bound lemmas | **Deferred:** generic span abstraction costs more than two short theorems | Likely negative reduction; medium risk | Low/medium |
+| 9 | Four final correctness theorem root exports and low-use domain facts | **Deferred/retained:** decide exports by policy; keep stable mathematics public | No proof reduction; low/medium risk | Medium |
 | 10 | Historical executable names and forced set/map residual symmetry | **Rejected:** production correspondence and mathematical differences dominate cosmetic consistency | Broad churn; high risk | Low |
 
 ## AlgoDMap readiness
@@ -188,22 +218,28 @@ belong in AlgoDMap until repeated use proves otherwise.
 
 ## Metrics
 
-The v3 collector and regression tests were used. Tactic counts are lexical
-counts from that collector.
+The v3 collector (SHA-256 `a07fc3573ed0134219b1d539c2684d717707ab7360a8e0ba97602ef95549e048`)
+and its regression tests were used. Tactic counts are lexical counts from that
+collector. Because its working-tree enumerator includes tracked deletions and
+then attempts to read them, the final run used the unmodified v3 counting
+functions with nonexistent paths filtered out; staging solely to satisfy the
+collector would have violated the task constraint. The measured source
+manifest is `17021b101a3c5e24e7894f47dd6e3573a3d7fbac61eca1ea55097a718607531d`.
 
 ### Repository
 
 | Metric | Before | After |
 | --- | ---: | ---: |
-| Physical Lean LOC | 4,139 | 4,150 |
-| Active Lean LOC | 3,519 | 3,530 |
-| Definitions (`def` + `abbrev`) | 72 | 72 |
+| Physical Lean LOC | 4,139 | 4,148 |
+| Active Lean LOC | 3,519 | 3,528 |
+| Definitions (`def` + `abbrev`) | 72 | 71 |
 | Public lemmas/theorems | 42 | 42 |
 | Private lemmas/theorems | 52 | 52 |
 | Compiler warnings | 0 | 0 |
 
-The eleven-line increase is wrapping required by longer semantic names, not
-new proof structure. Declaration and tactic counts did not increase.
+The remaining nine-line increase is wrapping required by longer semantic
+names, not new proof structure. Proof declaration and tactic counts did not
+increase; removing the Lake scaffold removed its unrelated `hello` definition.
 
 ### Algorithms
 
@@ -235,8 +271,10 @@ predecessor treatment, forward processing, suffix boundary, and denotational
 reconstruction—while retaining union versus overwrite and gap versus
 value-sensitive touching distinctions.
 
-Deferred work is deliberately narrow: revisit residual theorem ownership when
-AlgoDMap provides an actual second statement; decide root re-exports under a
-separate public import policy; and combine AlgoCMap recursive invariants only if
-the cursor proof demonstrates a concrete simplification. None blocks beginning
-AlgoDMap.
+The file tree now reflects semantic roles rather than the Lake project name:
+there is one library aggregator, one demo executable, and the flat set/map
+algorithm family. Deferred work is deliberately narrow: revisit residual
+theorem ownership when AlgoDMap provides an actual second statement; decide
+root re-exports under a separate public import policy; and combine AlgoCMap
+recursive invariants only if the cursor proof demonstrates a concrete
+simplification. None blocks beginning AlgoDMap.
