@@ -451,76 +451,77 @@ theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
 /-! ## Algo D with cached length
 
 DLen is the cursor algorithm above with the production `len` updates made
-explicit.  The cache is mathematical `Nat`; it is not a model of Rust's
-machine-width `SafeLen`.
+explicit.  The cache is a mathematical `Int`; cardinalities remain `Nat`.
 -/
 
 /-- The externally useful result of cached-length Algo D insertion. -/
 structure DLenResult where
   setResult : RangeSetBlaze
-  cachedLength : Nat
+  cachedLength : Int
   deriving Repr
 
 /-- Proof-free output used while the cursor-shaped result is being assembled. -/
 private structure DLenRawResult where
   ranges : List NR
-  cachedLength : Nat
+  cachedLength : Int
 
 /-- Cursor successor absorption with Rust's subtract-on-removal bookkeeping. -/
 private structure DLenScanResult where
   current : NR
   pending : List NR
-  cachedLength : Nat
+  cachedLength : Int
 
 private def mkDLenNR (lo hi : Int) (h : lo ≤ hi) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
 private def absorbSuccessorsDLen
-    (current : NR) (right : List NR) (cachedLength : Nat) : DLenScanResult :=
+    (current : NR) (right : List NR) (cachedLength : Int) : DLenScanResult :=
   match right with
   | [] => ⟨current, [], cachedLength⟩
   | next :: tail =>
       if _hmerge : NR.mergeable current next then
         absorbSuccessorsDLen (NR.glue current next) tail
-          (cachedLength - next.val.cardinality)
+          (cachedLength - Int.ofNat next.val.cardinality)
       else
         ⟨current, next :: tail, cachedLength⟩
 
 private def finishDLenScan
-    (current : NR) (right : List NR) (cachedLength : Nat)
+    (current : NR) (right : List NR) (cachedLength : Int)
     (pendingWasStored : Bool) (originalEnd : Int) : DLenScanResult :=
   let scanned := absorbSuccessorsDLen current right cachedLength
   if pendingWasStored && originalEnd < scanned.current.val.hi then
     { scanned with
       cachedLength := scanned.cachedLength +
-        IntRange.cardinality { lo := originalEnd, hi := scanned.current.val.hi - 1 } }
+        Int.ofNat (IntRange.cardinality
+          { lo := originalEnd, hi := scanned.current.val.hi - 1 }) }
   else
     scanned
 
 /-- The fresh cursor path: remove swallowed successors, insert the accumulated
 range, then add that newly represented range to the cache. -/
 private def freshInsertDLen
-    (gap : CursorGap) (input : NR) (cachedLength : Nat) : DLenRawResult :=
+    (gap : CursorGap) (input : NR) (cachedLength : Int) : DLenRawResult :=
   let scanned := finishDLenScan input gap.right cachedLength false input.val.hi
   ⟨gap.insertBefore scanned.current scanned.pending,
-    scanned.cachedLength + scanned.current.val.cardinality⟩
+    scanned.cachedLength + Int.ofNat scanned.current.val.cardinality⟩
 
 /-- The predecessor path: add the predecessor's newly covered tail, remove
 swallowed successors, and add any final extension beyond the inserted end. -/
 private def extendPredecessorDLen
-    (gap : CursorGap) (predecessor input : NR) (cachedLength : Nat) : DLenRawResult :=
+    (gap : CursorGap) (predecessor input : NR) (cachedLength : Int) : DLenRawResult :=
   let extendedHi := max predecessor.val.hi input.val.hi
   let extended := mkDLenNR predecessor.val.lo extendedHi
     (predecessor.property.trans (le_max_left _ _))
   let afterExtension := cachedLength +
-    IntRange.cardinality { lo := predecessor.val.hi, hi := input.val.hi - 1 }
+    Int.ofNat (IntRange.cardinality
+      { lo := predecessor.val.hi, hi := input.val.hi - 1 })
   let scanned := finishDLenScan extended gap.right afterExtension true input.val.hi
   ⟨gap.left.dropLast ++ scanned.current :: scanned.pending, scanned.cachedLength⟩
 
 /-- DLen's executable control flow is Algo D's control flow with only cache
 updates threaded through the fresh and predecessor scan paths. -/
 private def internalAddDLenRaw
-    (ranges : List NR) (cachedLength : Nat) (r : IntRange) : DLenRawResult :=
+    (ranges : List NR) (cachedLength : Int) (r : IntRange) : DLenRawResult :=
   if hempty : r.hi < r.lo then
     ⟨ranges, cachedLength⟩
   else
@@ -551,7 +552,7 @@ private def internalAddDLenRaw
         | none => freshInsertDLen gap input cachedLength
 
 private lemma absorbSuccessorsDLen_corresponds
-    (current : NR) (right : List NR) (cachedLength : Nat) :
+    (current : NR) (right : List NR) (cachedLength : Int) :
     (absorbSuccessorsDLen current right cachedLength).current =
         (absorbSuccessors current right).fst ∧
       (absorbSuccessorsDLen current right cachedLength).pending =
@@ -565,7 +566,7 @@ private lemma absorbSuccessorsDLen_corresponds
       · simp [absorbSuccessorsDLen, absorbSuccessors, hmerge]
 
 private lemma finishDLenScan_corresponds
-    (current : NR) (right : List NR) (cachedLength : Nat)
+    (current : NR) (right : List NR) (cachedLength : Int)
     (pendingWasStored : Bool) (originalEnd : Int) :
     (finishDLenScan current right cachedLength pendingWasStored originalEnd).current =
         (absorbSuccessors current right).fst ∧
@@ -578,7 +579,7 @@ private lemma finishDLenScan_corresponds
 
 /-- Erasing DLen bookkeeping gives exactly Algo D's list output. -/
 private theorem internalAddDLenRaw_corresponds
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
     (internalAddDLenRaw s.ranges cachedLength r).ranges =
       (internalAddD s r).ranges := by
   classical
@@ -643,15 +644,16 @@ private theorem internalAddDLenRaw_corresponds
 The proof is intentionally deferred to Phase 2; its hypotheses are the
 canonical-list and lower-bound obligations exposed by Algo D. -/
 private theorem internalAddDLenRaw_preserves_cardinality
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange)
-    (hlength : cachedLength = s.cardinality) :
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange)
+    (hlength : cachedLength = Int.ofNat s.cardinality) :
     (internalAddDLenRaw s.ranges cachedLength r).cachedLength =
-      rangesCardinality (internalAddDLenRaw s.ranges cachedLength r).ranges := by
+      Int.ofNat (rangesCardinality
+        (internalAddDLenRaw s.ranges cachedLength r).ranges) := by
   sorry
 
 /-- Algo D insertion with an explicit incoming cached element count. -/
 def internalAddDLen
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) : DLenResult :=
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) : DLenResult :=
   let raw := internalAddDLenRaw s.ranges cachedLength r
   let setResult : RangeSetBlaze :=
     ⟨raw.ranges, by
@@ -661,7 +663,7 @@ def internalAddDLen
 
 /-- DLen's set component is exactly Algo D's result representation. -/
 theorem internalAddDLen_setResult
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
     (internalAddDLen s cachedLength r).setResult = internalAddD s r := by
   unfold internalAddDLen
   dsimp only
@@ -670,15 +672,15 @@ theorem internalAddDLen_setResult
 
 /-- A valid incoming cached count remains valid after Algo D insertion. -/
 theorem internalAddDLen_cachedLength
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange)
-    (hlength : cachedLength = s.cardinality) :
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange)
+    (hlength : cachedLength = Int.ofNat s.cardinality) :
     (internalAddDLen s cachedLength r).cachedLength =
       (internalAddDLen s cachedLength r).setResult.cardinality := by
   exact internalAddDLenRaw_preserves_cardinality s cachedLength r hlength
 
 /-- DLen inherits Algo D's already-proved set semantics. -/
 theorem internalAddDLen_toSet
-    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
     (internalAddDLen s cachedLength r).setResult.toSet = s.toSet ∪ r.toSet := by
   rw [internalAddDLen_setResult]
   exact internalAddD_toSet s r
