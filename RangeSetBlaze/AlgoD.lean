@@ -221,12 +221,14 @@ private theorem predecessor_reuse_preserves_order_and_union
   change gap.left.getLast? = some predecessor at hprev
   obtain ⟨pre, hprefix⟩ := (List.getLast?_eq_some_iff.mp hprev)
   have hleft_decomp : gap.left = pre ++ [predecessor] := hprefix
+  have hwhole : List.Pairwise NR.before (gap.left ++ gap.right) := hsource ▸ hpw
+  obtain ⟨hleftPair, hrightPair, _⟩ := List.pairwise_append.mp hwhole
+  rw [hleft_decomp] at hleftPair
+  obtain ⟨hprefixPair, _, hprefixBeforePredecessor⟩ :=
+    List.pairwise_append.mp hleftPair
   have hpred_left : ∀ nr ∈ pre, nr ≺ predecessor := by
     intro nr hmem
-    have hp : List.Pairwise NR.before gap.left :=
-      (List.pairwise_append.mp (hsource ▸ hpw)).1
-    rw [hleft_decomp] at hp
-    exact (List.pairwise_append.mp hp).2.2 nr hmem predecessor (by simp)
+    exact hprefixBeforePredecessor nr hmem predecessor (by simp)
   have hpred_lo : predecessor.val.lo < input.val.lo := by
     apply hleft
     rw [hleft_decomp]
@@ -235,15 +237,10 @@ private theorem predecessor_reuse_preserves_order_and_union
     predecessor.val.lo (NR.glue predecessor input) gap.right
     (by
       simp [NR.glue, IntRange.mergeRange, min_eq_left (le_of_lt hpred_lo)])
-    (List.pairwise_append.mp (hsource ▸ hpw)).2.1
+    hrightPair
     (by
       intro nr hmem
       exact le_trans (le_of_lt hpred_lo) (hright nr hmem))
-  have hprefix_pair : List.Pairwise NR.before pre := by
-    have hp : List.Pairwise NR.before gap.left :=
-      (List.pairwise_append.mp (hsource ▸ hpw)).1
-    rw [hleft_decomp] at hp
-    exact (List.pairwise_append.mp hp).1
   have hprefix_scan : ∀ p ∈ pre, ∀ nr ∈
       ((absorbSuccessors (NR.glue predecessor input) gap.right).fst ::
         (absorbSuccessors (NR.glue predecessor input) gap.right).snd),
@@ -254,7 +251,7 @@ private theorem predecessor_reuse_preserves_order_and_union
       (pre ++ (absorbSuccessors (NR.glue predecessor input) gap.right).fst ::
         (absorbSuccessors (NR.glue predecessor input) gap.right).snd) := by
     apply List.pairwise_append.mpr
-    refine ⟨hprefix_pair, hscan.1, ?_⟩
+    refine ⟨hprefixPair, hscan.1, ?_⟩
     exact hprefix_scan
   have hsets : rangesToSet
       (pre ++ (absorbSuccessors (NR.glue predecessor input) gap.right).fst ::

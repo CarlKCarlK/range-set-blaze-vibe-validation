@@ -234,9 +234,7 @@ private lemma coalesceRuns_preserves_canonical_and_function
   induction runs with
   | nil => simp [coalesceRuns, Canonical]
   | cons run rest ih =>
-      have hspecRest := ih hordered.tail
-      have hcanonicalRest := hspecRest.1
-      have hfunctionRest := hspecRest.2
+      obtain ⟨hcanonicalRest, hfunctionRest⟩ := ih hordered.tail
       cases hcoal : coalesceRuns rest with
       | nil =>
           constructor

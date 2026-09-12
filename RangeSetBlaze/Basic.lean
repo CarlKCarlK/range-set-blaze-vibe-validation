@@ -78,9 +78,7 @@ def mergeRange (a b : IntRange) : IntRange :=
 /-- A hull is nonempty when its left input is nonempty. -/
 lemma mergeRange_nonempty {a b : IntRange}
     (ha : a.nonempty) : (mergeRange a b).nonempty := by
-  have h₁ : min a.lo b.lo ≤ a.lo := min_le_left _ _
-  have h₂ : a.hi ≤ max a.hi b.hi := le_max_left _ _
-  exact le_trans h₁ (le_trans ha h₂)
+  exact (min_le_left _ _).trans (ha.trans (le_max_left _ _))
 
 /-- If `a` and `b` have no integer gap either way, their hull is their union. -/
 lemma mergeRange_toSet_of_noGap
@@ -88,53 +86,9 @@ lemma mergeRange_toSet_of_noGap
     (h₁ : ¬ (a.hi + 1 < b.lo))
     (h₂ : ¬ (b.hi + 1 < a.lo)) :
     (mergeRange a b).toSet = a.toSet ∪ b.toSet := by
-  ext x; constructor <;> intro hx
-  · have h_lo :
-      min a.lo b.lo ≤ x := by
-        simpa [IntRange.mem_toSet_iff, mergeRange] using hx.left
-    have h_hi :
-      x ≤ max a.hi b.hi := by
-        simpa [IntRange.mem_toSet_iff, mergeRange] using hx.right
-    have h_lo' := (min_le_iff).1 h_lo
-    have h_hi' := (le_max_iff).1 h_hi
-    cases h_lo' with
-    | inl h_ax =>
-      cases h_hi' with
-      | inl h_xa =>
-        exact Or.inl ⟨h_ax, h_xa⟩
-      | inr h_xb =>
-        by_cases h_bx : b.lo ≤ x
-        · exact Or.inr ⟨h_bx, h_xb⟩
-        ·
-          have hx_lt : x < b.lo := lt_of_not_ge h_bx
-          have hb_le : b.lo ≤ a.hi + 1 := not_lt.mp h₁
-          have hx_lt' : x < a.hi + 1 := lt_of_lt_of_le hx_lt hb_le
-          have hx_le_a : x ≤ a.hi := by
-            linarith
-          exact Or.inl ⟨h_ax, hx_le_a⟩
-    | inr h_bx =>
-      cases h_hi' with
-      | inl h_xa =>
-        by_cases h_ax : a.lo ≤ x
-        · exact Or.inl ⟨h_ax, h_xa⟩
-        ·
-          have hx_lt : x < a.lo := lt_of_not_ge h_ax
-          have ha_le : a.lo ≤ b.hi + 1 := not_lt.mp h₂
-          have hx_lt' : x < b.hi + 1 := lt_of_lt_of_le hx_lt ha_le
-          have hx_le_b : x ≤ b.hi := by
-            linarith
-          exact Or.inr ⟨h_bx, hx_le_b⟩
-      | inr h_xb =>
-        exact Or.inr ⟨h_bx, h_xb⟩
-  · cases hx with
-    | inl hx_a =>
-      refine ⟨?_, ?_⟩
-      · exact le_trans (min_le_left _ _) hx_a.left
-      · exact le_trans hx_a.right (le_max_left _ _)
-    | inr hx_b =>
-      refine ⟨?_, ?_⟩
-      · exact le_trans (min_le_right _ _) hx_b.left
-      · exact le_trans hx_b.right (le_max_right _ _)
+  ext x
+  simp only [mem_toSet_iff, mergeRange, Set.mem_union]
+  omega
 
 /-- Convenient abbreviation for nonempty ranges as a subtype. -/
 abbrev NR := { r : IntRange // r.nonempty }
@@ -181,12 +135,9 @@ lemma before_asymm {a b : NR} (h : a ≺ b) : ¬ (b ≺ a) := by
 /-- The gap-separated ordering relation is transitive. -/
 lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
   unfold before at *
-  have h₁ : a.val.hi + 1 ≤ b.val.hi :=
-    (lt_of_lt_of_le hab b.property).le
-  have h₂ : b.val.hi ≤ b.val.hi + 1 := by
-    linarith
-  have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
-  exact lt_of_le_of_lt h₁ h₃
+  have hnonempty := b.property
+  change b.val.lo ≤ b.val.hi at hnonempty
+  omega
 
 /-- In a pairwise-`before` decomposition `prefix ++ suffix`, the last range of
 the prefix is before every range in the suffix. -/
@@ -226,15 +177,9 @@ lemma strict_start_split_suffix_lower_bound
 lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
     a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
   ext x
-  constructor
-  · intro hx
-    rcases hx with ⟨hax, hbx⟩
-    rcases (IntRange.mem_toSet_iff a.val x).1 hax with ⟨_, hax_hi⟩
-    rcases (IntRange.mem_toSet_iff b.val x).1 hbx with ⟨hbx_lo, _⟩
-    have h_lt : a.val.hi < b.val.lo := lt_trans (lt_add_one _) h
-    exact (not_le_of_gt h_lt) (le_trans hbx_lo hax_hi)
-  · intro hx
-    cases hx
+  simp only [Set.mem_inter_iff, IntRange.mem_toSet_iff, Set.mem_empty_iff_false,
+    iff_false, not_and, before] at *
+  omega
 
 instance : DecidableRel before :=
   fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
@@ -297,48 +242,17 @@ def glue (a b : NR) : NR :=
 lemma mergeable_glue_left {a b c : NR} (h : mergeable a c) :
     mergeable (glue a b) c := by
   rcases h with ⟨hac, hca⟩
-  constructor
-  · intro hgap
-    apply hac
-    unfold glue IntRange.mergeRange before at hgap
-    change max a.val.hi b.val.hi + 1 < c.val.lo at hgap
-    change a.val.hi + 1 < c.val.lo
-    have hmax : a.val.hi + 1 ≤ max a.val.hi b.val.hi + 1 := by
-      calc
-        a.val.hi + 1 = 1 + a.val.hi := add_comm _ _
-        _ ≤ 1 + max a.val.hi b.val.hi :=
-          add_le_add_right (le_max_left _ _) _
-        _ = max a.val.hi b.val.hi + 1 := add_comm _ _
-    exact lt_of_le_of_lt hmax hgap
-  · intro hgap
-    apply hca
-    unfold glue IntRange.mergeRange before at hgap
-    change c.val.hi + 1 < min a.val.lo b.val.lo at hgap
-    change c.val.hi + 1 < a.val.lo
-    exact lt_of_lt_of_le hgap (min_le_left _ _)
+  constructor <;> simp only [before, glue, IntRange.mergeRange] at * <;> omega
 
 lemma glue_sets (a b : NR) (h : mergeable a b) :
     (glue a b).val.toSet = a.val.toSet ∪ b.val.toSet := by
-  rcases h with ⟨h₁, h₂⟩
-  have :
-      (IntRange.mergeRange a.val b.val).toSet =
-        a.val.toSet ∪ b.val.toSet := by
-    simpa using
-      (IntRange.mergeRange_toSet_of_noGap
-        (a := a.val) (b := b.val)
-        (by simpa [before] using h₁)
-        (by
-          have := h₂
-          simpa [before] using this))
-  simpa [glue] using this
+  exact IntRange.mergeRange_toSet_of_noGap h.1 h.2
 
 /-- A range before both inputs is before their glue. -/
 lemma before_glue {z a b : NR}
     (hza : z ≺ a) (hzb : z ≺ b) :
     z ≺ glue a b := by
-  unfold before glue IntRange.mergeRange at *
-  have : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
-  simpa using this
+  exact lt_min hza hzb
 
 /-- The glue of two ranges before a third range is also before it. -/
 lemma glue_before {a b z : NR}

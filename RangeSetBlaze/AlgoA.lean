@@ -123,34 +123,14 @@ theorem internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddA s r).toSet = s.toSet ∪ r.toSet := by
   classical
   by_cases hr : r.nonempty
-  ·
-    -- Inserted case: reduce to the list-level `insert` lemma.
-    set res := insert ⟨r, hr⟩ s.ranges s.canonical with hInsert
-    rcases res with ⟨ys, hpair, hset, hmon⟩
-    have hNotEmpty : ¬ r.empty := by
-      simpa [IntRange.nonempty_iff_not_empty] using hr
-    have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by
-      simp [internalAddA, hNotEmpty, hInsert.symm]
-    have hcurr : (⟨r, hr⟩ : IntRange.NR).val.toSet = r.toSet := rfl
-    have htoSet : (internalAddA s r).toSet = rangesToSet ys := by
-      simp [hstruct, toSet_eq_rangesToSet]
-    have hsToSet : s.toSet = rangesToSet s.ranges := by
-      simp [toSet_eq_rangesToSet]
-    calc
-      (internalAddA s r).toSet
-          = rangesToSet ys := htoSet
-      _ = r.toSet ∪ rangesToSet s.ranges := by
-          simpa [hcurr] using hset
-      _ = s.toSet ∪ r.toSet := by
-          rw [hsToSet.symm, Set.union_comm]
-  ·
-    -- Empty range case: its set is ∅, and `internalAddA` returns `s`.
-    have hlt : r.hi < r.lo := by
-      -- hr = ¬(r.lo ≤ r.hi)
+  · have hnotEmpty := (IntRange.nonempty_iff_not_empty r).mp hr
+    generalize hresult : insert ⟨r, hr⟩ s.ranges s.canonical = result
+    rcases result with ⟨ys, hpair, hset, _⟩
+    simpa [internalAddA, hnotEmpty, hresult, toSet, Set.union_comm] using hset
+  · have hempty : r.toSet = (∅ : Set Int) := by
+      rw [IntRange.toSet_eq_empty_iff]
       simpa [IntRange.nonempty, not_le] using hr
-    have hEmpty : r.toSet = (∅ : Set Int) := by
-      simpa using IntRange.toSet_eq_empty_of_hi_lt_lo hlt
-    have hempty : r.empty := hlt
-    simp [internalAddA, hempty, hEmpty, Set.union_comm]
+    have hisEmpty := (IntRange.nonempty_iff_not_empty r).not.mp hr
+    simp [internalAddA, hisEmpty, hempty]
 
 end RangeSetBlaze

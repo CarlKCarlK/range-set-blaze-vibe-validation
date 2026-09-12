@@ -69,25 +69,6 @@ private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (Li
       else
         (current, next :: pendingTail)
 
-@[simp] private lemma deleteExtraNRs_loop_cons_merge
-    (current next : NR) (tail : List NR)
-    (h : next.val.lo ≤ current.val.hi + 1) :
-  deleteExtraNRs_loop current (next :: tail)
-    =
-  deleteExtraNRs_loop
-    (mkNR current.val.lo (max current.val.hi next.val.hi)
-      (by
-        have hc : current.val.lo ≤ current.val.hi := current.property
-        exact le_trans hc (le_max_left _ _)))
-    tail := by
-  simp [deleteExtraNRs_loop, h]
-
-@[simp] private lemma deleteExtraNRs_loop_cons_noMerge
-    (current next : NR) (tail : List NR)
-    (h : ¬ next.val.lo ≤ current.val.hi + 1) :
-  deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
-  simp [deleteExtraNRs_loop, h]
-
 /-- Set-level description of a single forward merge step. -/
 private lemma mergeForward_toSet
     (current next : NR)
@@ -101,8 +82,7 @@ private lemma mergeForward_toSet
           exact le_trans hc this)).val.toSet =
       current.val.toSet ∪ next.val.toSet := by
   have hmergeable : NR.mergeable current next :=
-    NR.mergeable_of_startsBefore_of_not_before
-      (show NR.startsBefore current next from horder) htouch
+    NR.mergeable_of_startsBefore_of_not_before horder htouch
   simpa [NR.glue, IntRange.mergeRange, mkNR, min_eq_left horder] using
     NR.glue_sets current next hmergeable
 
@@ -176,8 +156,7 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
         have hstep :
             deleteExtraNRs_loop current (next :: tail) =
               deleteExtraNRs_loop merged tail := by
-          simpa [hmerged_def] using
-            (deleteExtraNRs_loop_cons_merge current next tail hmerge)
+          simp [deleteExtraNRs_loop, hmerge, merged, hmerged_def]
         have hmerged_toSet :
             merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
           simpa [hmerged_def] using
@@ -215,7 +194,7 @@ private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
         exact ⟨horder_out, hbound_out, hsets_out⟩
       · have h_loop_eq :
             deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
-          exact deleteExtraNRs_loop_cons_noMerge current next tail hmerge
+          simp [deleteExtraNRs_loop, hmerge]
         have horder_out :
           List.Pairwise NR.before (next :: tail) →
           List.Pairwise NR.before
@@ -970,11 +949,10 @@ private lemma deleteExtraCLenLoop_preserves_cached_base
   | cons next tail ih =>
       by_cases hmerge : next.val.lo ≤ current.val.hi + 1
       · simp only [deleteExtraCLenLoop, hmerge, if_true]
+        rw [rangesCardinality_cons] at hlength
         have hremoved : next.val.cardinality ≤ cachedLength := by
-          rw [rangesCardinality_cons] at hlength
           omega
         apply ih
-        rw [rangesCardinality_cons] at hlength
         exact Nat.sub_eq_iff_eq_add hremoved |>.2 (by omega)
       · simpa [deleteExtraCLenLoop, hmerge] using hlength
 

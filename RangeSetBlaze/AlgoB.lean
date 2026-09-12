@@ -339,63 +339,6 @@ private lemma buildSplit_sets
   simp [buildSplit, glueMany_sets_mergeable curr touching ht,
     Set.union_left_comm, Set.union_comm]
 
-/-- Everything in `before` is before everything in `touching`. -/
-private lemma split_before_before_touch
-    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
-    (w : SplitWitness curr xs) :
-    ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃t⦄, t ∈ w.touching → b ≺ t := by
-  have hcanonicalFull :
-      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using hcanonical
-  have hcanonicalNested :
-      List.Pairwise (· ≺ ·)
-        (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using hcanonicalFull
-  obtain ⟨_, hcanonicalTail, cross_before⟩ :=
-    List.pairwise_append.1 hcanonicalNested
-  intro b hb t ht
-  have ht' : t ∈ w.touching ++ w.after := by
-    simp [List.mem_append, ht]
-  exact cross_before (a := b) (b := t) hb ht'
-
-/-- Everything in `before` is before everything in `after`. -/
-private lemma split_before_before_after
-    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
-    (w : SplitWitness curr xs) :
-    ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃a⦄, a ∈ w.after → b ≺ a := by
-  have hcanonicalFull :
-      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using hcanonical
-  have hcanonicalNested :
-      List.Pairwise (· ≺ ·)
-        (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using hcanonicalFull
-  obtain ⟨_, hcanonicalTail, cross_before⟩ :=
-    List.pairwise_append.1 hcanonicalNested
-  intro b hb a ha
-  have ha' : a ∈ w.touching ++ w.after := by
-    simp [List.mem_append, ha]
-  exact cross_before (a := b) (b := a) hb ha'
-
-/-- Everything in `touching` is before everything in `after`. -/
-private lemma split_touch_before_after
-    (curr : NR) {xs} (hcanonical : List.Pairwise (· ≺ ·) xs)
-    (w : SplitWitness curr xs) :
-    ∀ ⦃t⦄, t ∈ w.touching → ∀ ⦃a⦄, a ∈ w.after → t ≺ a := by
-  have hcanonicalFull :
-      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
-    simpa [w.order] using hcanonical
-  have hcanonicalNested :
-      List.Pairwise (· ≺ ·)
-        (w.before ++ (w.touching ++ w.after)) := by
-    simpa [List.append_assoc] using hcanonicalFull
-  obtain ⟨_, hcanonicalTail, _⟩ :=
-    List.pairwise_append.1 hcanonicalNested
-  obtain ⟨_, _, cross_touch⟩ :=
-    List.pairwise_append.1 hcanonicalTail
-  intro t ht a ha
-  exact cross_touch (a := t) (b := a) ht ha
-
 /-- Legality for Algo B rebuild:
 `before ++ [glueMany curr touching] ++ after` is pairwise `(· ≺ ·)`. -/
 private lemma buildSplit_pairwise
@@ -407,14 +350,10 @@ private lemma buildSplit_pairwise
   have hcanonicalFull :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
     simpa [w.order] using hcanonical
-  have h_split1 :=
+  obtain ⟨hcanonicalBefore, hcanonicalTouchAfter, hbeforeTouchAfter⟩ :=
     List.pairwise_append.1 (by simpa [List.append_assoc] using hcanonicalFull)
-  have hcanonicalBefore : List.Pairwise (· ≺ ·) w.before := h_split1.1
-  have hcanonicalTouchAfter :
-      List.Pairwise (· ≺ ·) (w.touching ++ w.after) := h_split1.2.1
-  have h_split2 := List.pairwise_append.1 hcanonicalTouchAfter
-  have hcanonicalTouching : List.Pairwise (· ≺ ·) w.touching := h_split2.1
-  have hcanonicalAfter : List.Pairwise (· ≺ ·) w.after := h_split2.2.1
+  obtain ⟨_, hcanonicalAfter, htouchAfter⟩ :=
+    List.pairwise_append.1 hcanonicalTouchAfter
   have h_before_glue :
       ∀ b ∈ w.before, b ≺ g := by
     intro b hb
@@ -422,9 +361,7 @@ private lemma buildSplit_pairwise
     have hb_touch :
         ∀ t ∈ w.touching, b ≺ t := by
       intro t ht
-      exact
-        split_before_before_touch
-          (curr := curr) (xs := xs) hcanonical w hb ht
+      exact hbeforeTouchAfter b hb t (by simp [ht])
     have hb_glue_aux :
         ∀ (acc : NR) (ts : List NR),
             (∀ t ∈ ts, b ≺ t) →
@@ -456,9 +393,7 @@ private lemma buildSplit_pairwise
     have htouch_to_a :
         ∀ t ∈ w.touching, t ≺ a := by
       intro t ht
-      exact
-        split_touch_before_after
-          (curr := curr) (xs := xs) hcanonical w ht ha
+      exact htouchAfter t ht a ha
     have h_aux :
         ∀ (acc : NR) (ts : List NR),
             (∀ t ∈ ts, t ≺ a) →
@@ -501,9 +436,7 @@ private lemma buildSplit_pairwise
         by
           intro x hx a ha
           rcases List.mem_append.1 hx with hx | hx
-          · exact
-              split_before_before_after
-                (curr := curr) (xs := xs) hcanonical w hx ha
+          · exact hbeforeTouchAfter x hx a (by simp [ha])
           · rcases List.mem_singleton.1 hx with rfl
             exact h_glue_after a ha⟩
   simpa [buildSplit, hg, List.append_assoc] using pair_final
@@ -515,11 +448,7 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
     let w := splitRanges curr s.ranges s.canonical
     { ranges := buildSplit curr w.before w.touching w.after
       canonical :=
-        buildSplit_pairwise
-          (curr := curr)
-          (xs := s.ranges)
-          (hcanonical := s.canonical)
-          (w := w) }
+        buildSplit_pairwise curr s.canonical w }
   else
     s
 
@@ -527,57 +456,32 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
 theorem internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddB s r).toSet = s.toSet ∪ r.toSet := by
   by_cases hr : r.nonempty
-  · -- Nonempty range: unfold and compare via list sets.
-    set curr : NR := ⟨r, hr⟩
+  · set curr : NR := ⟨r, hr⟩
     set w := splitRanges curr s.ranges s.canonical
     have hbuild :
         rangesToSet (buildSplit curr w.before w.touching w.after) =
           curr.val.toSet ∪
             (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) :=
-      buildSplit_sets
-          (curr := curr) (xs := s.ranges)
-          (before := w.before) (touching := w.touching) (after := w.after)
-          w.order
-          (by
-            intro t ht
-            exact w.touch_ok ht)
-    have hsplit :
-        rangesToSet s.ranges =
-          rangesToSet w.before ∪ rangesToSet w.touching ∪ rangesToSet w.after := by
-      simp [w.order, rangesToSet_append, Set.union_assoc]
-    have hcurr : curr.val.toSet = r.toSet := rfl
-    have hs : s.toSet = rangesToSet s.ranges := toSet_eq_rangesToSet s
+      buildSplit_sets curr w.order (fun _ ht => w.touch_ok ht)
     have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
-    have htoSet :
-        (internalAddB s r).toSet =
-          curr.val.toSet ∪
-            (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
+    have htoSet : (internalAddB s r).toSet =
+        curr.val.toSet ∪
+          (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
       simp [internalAddB, hne, curr, w, toSet_eq_rangesToSet, hbuild]
-    calc
-      (internalAddB s r).toSet
-          = curr.val.toSet ∪
-              (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := htoSet
-      _ = r.toSet ∪ (rangesToSet w.touching ∪ rangesToSet w.before ∪ rangesToSet w.after) := by
-          simp [hcurr]
-      _ = r.toSet ∪ rangesToSet s.ranges := by
-          simp [Set.union_left_comm, Set.union_comm, hsplit]
-      _ = r.toSet ∪ s.toSet := by
-          rw [hs.symm]
-      _ = s.toSet ∪ r.toSet := by
-          simp [Set.union_comm]
-  · -- Empty range: adding it changes nothing.
+    have hsplit : rangesToSet s.ranges =
+        rangesToSet w.before ∪ rangesToSet w.touching ∪ rangesToSet w.after := by
+      simp [w.order, rangesToSet_append, Set.union_assoc]
+    rw [htoSet]
+    change _ = rangesToSet s.ranges ∪ r.toSet
+    rw [hsplit]
+    simp only [curr]
+    ac_rfl
+  ·
     have hEmpty : r.empty :=
       not_not.mp ((not_congr (IntRange.nonempty_iff_not_empty r)).1 hr)
     have hEmptySet : r.toSet = (∅ : Set Int) :=
       IntRange.toSet_eq_empty_of_hi_lt_lo hEmpty
-    have hToSet :
-        (internalAddB s r).toSet = s.toSet := by
-      simp [internalAddB, hEmpty, toSet_eq_rangesToSet]
-    calc
-      (internalAddB s r).toSet
-          = s.toSet := hToSet
-      _ = s.toSet ∪ (∅ : Set Int) := by simp
-      _ = s.toSet ∪ r.toSet := by simp [hEmptySet]
+    simp [internalAddB, hEmpty, hEmptySet]
 
 
 end
