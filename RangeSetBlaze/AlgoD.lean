@@ -550,12 +550,94 @@ private def internalAddDLenRaw
               freshInsertDLen gap input cachedLength
         | none => freshInsertDLen gap input cachedLength
 
+private lemma absorbSuccessorsDLen_corresponds
+    (current : NR) (right : List NR) (cachedLength : Nat) :
+    (absorbSuccessorsDLen current right cachedLength).current =
+        (absorbSuccessors current right).fst ∧
+      (absorbSuccessorsDLen current right cachedLength).pending =
+        (absorbSuccessors current right).snd := by
+  induction right generalizing current cachedLength with
+  | nil => simp [absorbSuccessorsDLen, absorbSuccessors]
+  | cons next tail ih =>
+      by_cases hmerge : NR.mergeable current next
+      · simp only [absorbSuccessorsDLen, absorbSuccessors, hmerge]
+        exact ih _ _
+      · simp [absorbSuccessorsDLen, absorbSuccessors, hmerge]
+
+private lemma finishDLenScan_corresponds
+    (current : NR) (right : List NR) (cachedLength : Nat)
+    (pendingWasStored : Bool) (originalEnd : Int) :
+    (finishDLenScan current right cachedLength pendingWasStored originalEnd).current =
+        (absorbSuccessors current right).fst ∧
+      (finishDLenScan current right cachedLength pendingWasStored originalEnd).pending =
+        (absorbSuccessors current right).snd := by
+  have hscan := absorbSuccessorsDLen_corresponds current right cachedLength
+  unfold finishDLenScan
+  dsimp only
+  split <;> exact ⟨hscan.1, hscan.2⟩
+
 /-- Erasing DLen bookkeeping gives exactly Algo D's list output. -/
 private theorem internalAddDLenRaw_corresponds
     (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
     (internalAddDLenRaw s.ranges cachedLength r).ranges =
       (internalAddD s r).ranges := by
-  sorry
+  classical
+  by_cases hempty : r.hi < r.lo
+  · simp [internalAddDLenRaw, internalAddD, hempty]
+  · have hD : (internalAddD s r).ranges =
+        internalAddDNRs s.ranges ⟨r, not_lt.mp hempty⟩ := by
+      simp [internalAddD, hempty]
+    rw [hD]
+    let input : NR := ⟨r, not_lt.mp hempty⟩
+    let gap := lowerBoundGap r.lo s.ranges
+    change (internalAddDLenRaw s.ranges cachedLength r).ranges =
+      internalAddDNRs s.ranges input
+    simp only [internalAddDLenRaw, hempty, if_false, input, gap,
+      internalAddDNRs]
+    cases hprev : (lowerBoundGap r.lo s.ranges).peekPrev with
+    | some predecessor =>
+        simp_all [hempty]
+        split
+        · split
+          · simp_all [hempty]
+          · have hgap := lowerBoundGap_spec s.ranges r.lo s.canonical
+            have hleft : ∀ nr ∈ (lowerBoundGap r.lo s.ranges).left,
+                nr.val.lo < r.lo := hgap.2.1
+            change (lowerBoundGap r.lo s.ranges).left.getLast? =
+              some predecessor at hprev
+            have hpred : predecessor.val.lo < r.lo := hleft predecessor
+              (List.mem_of_mem_getLast? hprev)
+            have hnr : mkDLenNR predecessor.val.lo (max predecessor.val.hi r.hi)
+                (predecessor.property.trans (le_max_left _ _)) =
+                NR.glue predecessor input := by
+              apply Subtype.ext
+              dsimp [input]
+              simp [NR.glue, IntRange.mergeRange, min_eq_left hpred.le]
+              rfl
+            simp [extendPredecessorDLen, finishDLenScan_corresponds,
+              replaceStoredPredecessor]
+            rw [← hnr]
+            exact ⟨rfl, rfl⟩
+        · cases hnext : (lowerBoundGap r.lo s.ranges).peekNext with
+          | some successor =>
+              simp_all [hempty]
+              split
+              · simp_all [hempty]
+              · simp [freshInsertDLen, finishDLenScan_corresponds]
+          | none =>
+              simp_all [hempty]
+              simp [freshInsertDLen, finishDLenScan_corresponds]
+    | none =>
+        simp_all [hempty]
+        cases hnext : (lowerBoundGap r.lo s.ranges).peekNext with
+        | some successor =>
+            simp_all [hempty]
+            split
+            · simp_all [hempty]
+            · simp [freshInsertDLen, finishDLenScan_corresponds]
+        | none =>
+            simp_all [hempty]
+            simp [freshInsertDLen, finishDLenScan_corresponds]
 
 /-- Branch-local cached arithmetic computes the cardinality of DLen's output.
 The proof is intentionally deferred to Phase 2; its hypotheses are the
