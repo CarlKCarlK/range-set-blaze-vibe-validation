@@ -937,4 +937,286 @@ theorem internalAddCMap_toFunction {Value : Type*} [DecidableEq Value]
     exact (internalAddCMapRuns_preserves_canonical_and_overwrite
       map.runs input value (by omega) map.canonical).2
 
+/-!
+## Algo CMap with cached length
+
+The production cache counts represented scalar keys, not runs. The executable
+model below carries that absolute count through the same predecessor split and
+forward scan as `internalAddCMapRuns`. Stored ranges are subtracted in full
+when removed; retained residuals are then added back. A pending run contributes
+to the cache either while it remains stored or when it is finally inserted.
+-/
+
+/-- The public result of production-shaped map insertion with explicit cached
+key cardinality. -/
+structure CMapLenResult (Value : Type*) where
+  mapResult : RangeMapBlaze Value
+  cachedLength : Nat
+
+/-- Proof-free output used while runs and their cached key count are assembled. -/
+private structure CMapLenRawResult (Value : Type*) where
+  runs : List (Run Value)
+  cachedLength : Nat
+
+/-- Add a pending run exactly when it has not already been counted as a stored
+predecessor. -/
+private def countPendingIfFresh {Value : Type*}
+    (pendingIsStored : Bool) (cachedLength : Nat) (pending : Run Value) : Nat :=
+  if pendingIsStored then cachedLength else cachedLength + pending.cardinality
+
+/-- Forward overwrite/merge scan with the production absolute-cache updates.
+
+Each consumed successor is subtracted in full. If the pending run is already
+stored, growing it adds only its right extension; otherwise its completed
+cardinality is added at the stopping point. A right residual is reinserted and
+counted after its old containing run has been removed. -/
+private def scanForwardCMapLen {Value : Type*} [DecidableEq Value]
+    (pending : Run Value) (pendingIsStored : Bool) (cachedLength : Nat) :
+    List (Run Value) → CMapLenRawResult Value
+  | [] =>
+      ⟨[pending], countPendingIfFresh pendingIsStored cachedLength pending⟩
+  | next :: rest =>
+      if next.range.val.lo = pending.range.val.lo ∧
+          pending.value = next.value ∧
+          pending.range.val.hi ≤ next.range.val.hi then
+        ⟨next :: rest, cachedLength⟩
+      else if _hsame : pending.value = next.value then
+        if next.range.val.lo ≤ pending.range.val.hi + 1 then
+          let merged := mergeForward pending next
+          let afterRemoval := cachedLength - next.cardinality
+          let afterExtension :=
+            if pendingIsStored ∧ pending.range.val.hi < next.range.val.hi then
+              afterRemoval + IntRange.rightExtensionCardinality
+                pending.range.val.hi next.range.val.hi
+            else
+              afterRemoval
+          scanForwardCMapLen merged pendingIsStored afterExtension rest
+        else
+          ⟨pending :: next :: rest,
+            countPendingIfFresh pendingIsStored cachedLength pending⟩
+      else if _hoverlap : next.range.val.lo ≤ pending.range.val.hi then
+        let afterRemoval := cachedLength - next.cardinality
+        if hextends : pending.range.val.hi < next.range.val.hi then
+          let residual := rightResidualAfter pending.range.val.hi next hextends
+          ⟨pending :: residual :: rest,
+            countPendingIfFresh pendingIsStored afterRemoval pending +
+              residual.cardinality⟩
+        else
+          scanForwardCMapLen pending pendingIsStored afterRemoval rest
+      else
+        ⟨pending :: next :: rest,
+          countPendingIfFresh pendingIsStored cachedLength pending⟩
+termination_by suffix => suffix.length
+
+/-- Proof-free CMapLen control flow. This is `internalAddCMapRuns` plus the
+absolute add/subtract operations performed by production cached bookkeeping. -/
+private def internalAddCMapLenRaw {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi) :
+    CMapLenRawResult Value :=
+  let split := List.span (fun run => decide (run.range.val.lo < input.lo)) runs
+  let before := split.fst
+  let after := split.snd
+  let inserted : Run Value := { range := ⟨input, hnonempty⟩, value := value }
+  match hprev : before.getLast? with
+  | none => scanForwardCMapLen inserted false cachedLength after
+  | some prev =>
+      let init := before.dropLast
+      if hsame : prev.value = value then
+        if htouch : input.lo ≤ prev.range.val.hi + 1 then
+          if input.hi ≤ prev.range.val.hi then
+            ⟨runs, cachedLength⟩
+          else
+            let extendedLength := cachedLength +
+              IntRange.rightExtensionCardinality prev.range.val.hi input.hi
+            let scan := scanForwardCMapLen
+              (mergeForward prev inserted) true extendedLength after
+            ⟨init ++ scan.runs, scan.cachedLength⟩
+        else
+          let scan := scanForwardCMapLen inserted false cachedLength after
+          ⟨before ++ scan.runs, scan.cachedLength⟩
+      else if hoverlap : input.lo ≤ prev.range.val.hi then
+        have hstarts : prev.range.val.lo < input.lo := by
+          have hmem : prev ∈ before := List.mem_of_mem_getLast? (by simp [hprev])
+          have hmem' : prev ∈
+              runs.takeWhile (fun run => decide (run.range.val.lo < input.lo)) := by
+            simpa only [before, split, List.span_eq_takeWhile_dropWhile] using hmem
+          have hpred := List.mem_takeWhile_imp
+            (p := fun run : Run Value => decide (run.range.val.lo < input.lo)) hmem'
+          exact of_decide_eq_true hpred
+        let left := leftResidualBefore input.lo prev hstarts
+        let afterTrim := cachedLength -
+          IntRange.cardinality { lo := input.lo, hi := prev.range.val.hi }
+        if hextends : input.hi < prev.range.val.hi then
+          let residual := rightResidualAfter input.hi prev hextends
+          ⟨init ++ left :: inserted :: residual :: after,
+            afterTrim + inserted.cardinality + residual.cardinality⟩
+        else
+          let scan := scanForwardCMapLen inserted false afterTrim after
+          ⟨init ++ left :: scan.runs, scan.cachedLength⟩
+      else
+        let scan := scanForwardCMapLen inserted false cachedLength after
+        ⟨before ++ scan.runs, scan.cachedLength⟩
+
+/-- Trimming a predecessor removes exactly the overwritten tail and retains
+the left residual. -/
+private lemma leftResidualBefore_cardinality
+    {Value : Type*} (start : Int) (run : Run Value)
+    (hstart : run.range.val.lo < start) (hoverlap : start ≤ run.range.val.hi) :
+    run.cardinality =
+      (leftResidualBefore start run hstart).cardinality +
+        IntRange.cardinality { lo := start, hi := run.range.val.hi } := by
+  have hrun := run.range.property
+  rw [Run.cardinality, Run.cardinality, IntRange.cardinality_of_nonempty hrun]
+  rw [IntRange.cardinality_of_nonempty (show run.range.val.lo ≤ start - 1 by omega)]
+  rw [IntRange.cardinality_of_nonempty hoverlap]
+  simp only [leftResidualBefore]
+  rw [← Int.toNat_add (show 0 ≤ start - 1 - run.range.val.lo + 1 by omega)
+    (show 0 ≤ run.range.val.hi - start + 1 by omega)]
+  congr 1
+  omega
+
+/-- Removing an overhanging successor and reinserting its right residual
+partitions the old successor into overwritten and retained cardinalities. -/
+private lemma rightResidualAfter_cardinality
+    {Value : Type*} (stop : Int) (run : Run Value)
+    (hlower : run.range.val.lo ≤ stop) (hextends : stop < run.range.val.hi) :
+    run.cardinality =
+      IntRange.cardinality { lo := run.range.val.lo, hi := stop } +
+        (rightResidualAfter stop run hextends).cardinality := by
+  have hrun := run.range.property
+  rw [Run.cardinality, Run.cardinality, IntRange.cardinality_of_nonempty hrun]
+  rw [IntRange.cardinality_of_nonempty hlower]
+  rw [IntRange.cardinality_of_nonempty (show stop + 1 ≤ run.range.val.hi by omega)]
+  simp only [rightResidualAfter]
+  rw [← Int.toNat_add (show 0 ≤ stop - run.range.val.lo + 1 by omega)
+    (show 0 ≤ run.range.val.hi - (stop + 1) + 1 by omega)]
+  congr 1
+  omega
+
+/-- A predecessor surrounding the input is partitioned into the left
+residual, overwritten middle, and right residual. -/
+private lemma twoSidedPredecessorSplit_cardinality
+    {Value : Type*} (input : IntRange) (run : Run Value)
+    (hstart : run.range.val.lo < input.lo)
+    (hnonempty : input.lo ≤ input.hi) (hextends : input.hi < run.range.val.hi) :
+    run.cardinality =
+      (leftResidualBefore input.lo run hstart).cardinality +
+        input.cardinality +
+          (rightResidualAfter input.hi run hextends).cardinality := by
+  have hrun := run.range.property
+  rw [Run.cardinality, Run.cardinality, Run.cardinality]
+  rw [IntRange.cardinality_of_nonempty hrun]
+  rw [IntRange.cardinality_of_nonempty
+    (show run.range.val.lo ≤ input.lo - 1 by omega)]
+  rw [IntRange.cardinality_of_nonempty hnonempty]
+  rw [IntRange.cardinality_of_nonempty
+    (show input.hi + 1 ≤ run.range.val.hi by omega)]
+  simp only [leftResidualBefore, rightResidualAfter]
+  rw [← Int.toNat_add
+    (show 0 ≤ input.lo - 1 - run.range.val.lo + 1 by omega)
+    (show 0 ≤ input.hi - input.lo + 1 by omega)]
+  rw [← Int.toNat_add
+    (show 0 ≤
+      (input.lo - 1 - run.range.val.lo + 1) +
+        (input.hi - input.lo + 1) by omega)
+    (show 0 ≤ run.range.val.hi - (input.hi + 1) + 1 by omega)]
+  congr 1
+  omega
+
+/-- The cached scan erases exactly to `scanForward`, while its cache equals
+the cardinality of the emitted runs above an untouched base. The hypothesis
+describes whether pending is already present in the incoming absolute cache. -/
+private theorem scanForwardCMapLen_preserves_correspondence_and_cardinality
+    {Value : Type*} [DecidableEq Value]
+    (pending : Run Value) (pendingIsStored : Bool)
+    (suffix : List (Run Value)) (cachedLength base : Nat)
+    (hcache : cachedLength = base +
+      (if pendingIsStored then pending.cardinality else 0) +
+        runsCardinality suffix)
+    (hstoredStart : pendingIsStored = true →
+      ∀ run ∈ suffix, pending.range.val.lo < run.range.val.lo) :
+    let result := scanForwardCMapLen
+      pending pendingIsStored cachedLength suffix
+    result.runs = scanForward pending suffix ∧
+      result.cachedLength = base + runsCardinality result.runs := by
+  sorry
+
+/-- Erasing CMapLen bookkeeping gives exactly Algo CMap's raw run output. -/
+private theorem internalAddCMapLenRaw_corresponds
+    {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi) :
+    (internalAddCMapLenRaw runs cachedLength input value hnonempty).runs =
+      internalAddCMapRuns runs input value hnonempty := by
+  sorry
+
+/-- Branch-local add/subtract bookkeeping computes the cardinality of the raw
+CMapLen output whenever the incoming absolute cache is valid. -/
+private theorem internalAddCMapLenRaw_preserves_cardinality
+    {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi)
+    (hcanonical : Canonical runs)
+    (hlength : cachedLength = runsCardinality runs) :
+    (internalAddCMapLenRaw runs cachedLength input value hnonempty).cachedLength =
+      runsCardinality
+        (internalAddCMapLenRaw runs cachedLength input value hnonempty).runs := by
+  sorry
+
+/-- Algo CMap insertion with production-shaped explicit cached key count. -/
+def internalAddCMapLen {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) : CMapLenResult Value := by
+  if h : input.hi < input.lo then
+    exact ⟨map, cachedLength⟩
+  else
+    have hnonempty : input.lo ≤ input.hi := by omega
+    let raw := internalAddCMapLenRaw map.runs cachedLength input value hnonempty
+    have hruns : raw.runs = internalAddCMapRuns map.runs input value hnonempty :=
+      internalAddCMapLenRaw_corresponds map.runs cachedLength input value hnonempty
+    have hcanonical : Canonical raw.runs := by
+      rw [hruns]
+      exact (internalAddCMapRuns_preserves_canonical_and_overwrite
+        map.runs input value hnonempty map.canonical).1
+    exact ⟨⟨raw.runs, hcanonical⟩, raw.cachedLength⟩
+
+/-- CMapLen's map component is exactly Algo CMap's result representation. -/
+theorem internalAddCMapLen_mapResult {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) :
+    (internalAddCMapLen map cachedLength input value).mapResult =
+      internalAddCMap map input value := by
+  unfold internalAddCMapLen internalAddCMap
+  by_cases hempty : input.hi < input.lo
+  · simp [hempty]
+  · simp only [dif_neg hempty]
+    rw [RangeMapBlaze.mk.injEq]
+    exact internalAddCMapLenRaw_corresponds
+      map.runs cachedLength input value (by omega)
+
+/-- A valid incoming cached key count remains valid after CMapLen insertion. -/
+theorem internalAddCMapLen_cachedLength {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value)
+    (hlength : cachedLength = map.cardinality) :
+    (internalAddCMapLen map cachedLength input value).cachedLength =
+      (internalAddCMapLen map cachedLength input value).mapResult.cardinality := by
+  unfold internalAddCMapLen
+  by_cases hempty : input.hi < input.lo
+  · simpa [hempty, RangeMapBlaze.cardinality] using hlength
+  · simp only [dif_neg hempty]
+    exact internalAddCMapLenRaw_preserves_cardinality map.runs cachedLength
+      input value (by omega) map.canonical
+      (by simpa [RangeMapBlaze.cardinality] using hlength)
+
+/-- CMapLen inherits Algo CMap's exact pointwise overwrite semantics. -/
+theorem internalAddCMapLen_toFunction {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) :
+    (internalAddCMapLen map cachedLength input value).mapResult.toFunction =
+      overwrite map.toFunction input value := by
+  rw [internalAddCMapLen_mapResult]
+  exact internalAddCMap_toFunction map input value
+
 end RangeMapBlaze

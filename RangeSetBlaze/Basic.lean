@@ -375,6 +375,11 @@ structure Run (Value : Type*) where
 
 namespace Run
 
+/-- The number of scalar keys represented by a run. The carried value does
+not affect cardinality. -/
+def cardinality {Value : Type*} (run : Run Value) : Nat :=
+  run.range.val.cardinality
+
 /-- Value-independent run order: the ranges are sorted and do not overlap. -/
 def disjointBefore {Value : Type*} (a b : Run Value) : Prop :=
   a.range.val.hi < b.range.val.lo
@@ -426,6 +431,26 @@ lemma before_trans {Value : Type*} {a b c : Run Value}
   simpa only [IntRange.NR.before] using hgap
 
 end Run
+
+/-- The number of scalar keys represented by a list of runs. For canonical
+run lists, disjointness makes this the cardinality of the map's support. -/
+def runsCardinality {Value : Type*} (runs : List (Run Value)) : Nat :=
+  runs.foldr (fun run total => run.cardinality + total) 0
+
+@[simp] lemma runsCardinality_nil {Value : Type*} :
+    runsCardinality ([] : List (Run Value)) = 0 := rfl
+
+@[simp] lemma runsCardinality_cons {Value : Type*}
+    (run : Run Value) (runs : List (Run Value)) :
+    runsCardinality (run :: runs) = run.cardinality + runsCardinality runs := rfl
+
+@[simp] lemma runsCardinality_append {Value : Type*}
+    (left right : List (Run Value)) :
+    runsCardinality (left ++ right) =
+      runsCardinality left + runsCardinality right := by
+  induction left with
+  | nil => simp
+  | cons run rest ih => simp [ih, Nat.add_assoc]
 
 /-- A run list has canonical shape when every earlier run canonically precedes every
 later run. -/
@@ -519,6 +544,10 @@ def toFunction {Value : Type*} (map : RangeMapBlaze Value) : Int → Option Valu
 /-- The support (key set) of a range map consists exactly of mapped keys. -/
 def support {Value : Type*} (map : RangeMapBlaze Value) : Set Int :=
   { key | map.toFunction key ≠ none }
+
+/-- The mathematical number of scalar keys represented by a range map. -/
+def cardinality {Value : Type*} (map : RangeMapBlaze Value) : Nat :=
+  runsCardinality map.runs
 
 section Examples
 
