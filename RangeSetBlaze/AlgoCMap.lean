@@ -76,6 +76,7 @@ private def scanForward {Value : Type*} [DecidableEq Value]
           pending :: next :: rest
 termination_by suffix => suffix.length
 
+/-- Merging equal-valued touching runs preserves their first-match function. -/
 private lemma mergeForward_toFunction {Value : Type*}
     (pending next : Run Value) (rest : List (Run Value))
     (hlower : pending.range.val.lo ≤ next.range.val.lo)
@@ -94,7 +95,7 @@ private lemma mergeForward_toFunction {Value : Type*}
     · have hmerged : pending.range.val.lo ≤ key ∧
           key ≤ max pending.range.val.hi next.range.val.hi :=
         ⟨hlower.trans hnext.1, hnext.2.trans (le_max_right _ _)⟩
-      simp [mergeForward, hpending, hnext, hmerged, hsame]
+      simp [mergeForward, hnext, hmerged, hsame]
     · have hmerged : ¬ (pending.range.val.lo ≤ key ∧
           key ≤ max pending.range.val.hi next.range.val.hi) := by
         intro h
@@ -108,7 +109,9 @@ private lemma mergeForward_toFunction {Value : Type*}
           some pending.value else runsToFunction rest key) = _
       rw [if_neg hmerged, if_neg hpending, if_neg hnext]
 
-private lemma exactCover_toFunction {Value : Type*}
+/-- A same-valued run with the pending start and at least its end already
+represents the pending insertion. -/
+private lemma sameValueExactCover_toFunction {Value : Type*}
     (pending next : Run Value) (rest : List (Run Value))
     (hlo : next.range.val.lo = pending.range.val.lo)
     (hsame : pending.value = next.value)
@@ -123,7 +126,9 @@ private lemma exactCover_toFunction {Value : Type*}
     simp [hpending, hnext, hsame]
   · simp [hpending]
 
-private lemma deleteCovered_toFunction {Value : Type*}
+/-- A later run fully covered by `pending` can be deleted without changing
+first-match semantics. -/
+private lemma coveredRunDeletion_toFunction {Value : Type*}
     (pending next : Run Value) (rest : List (Run Value))
     (hlower : pending.range.val.lo ≤ next.range.val.lo)
     (hhi : next.range.val.hi ≤ pending.range.val.hi) :
@@ -137,7 +142,9 @@ private lemma deleteCovered_toFunction {Value : Type*}
       omega
     simp [hpending, hnext]
 
-private lemma rightResidual_toFunction {Value : Type*}
+/-- Replacing the overlapping part of `next` by its right residual preserves
+the function of `pending :: next :: rest`. -/
+private lemma rightResidualSplit_toFunction {Value : Type*}
     (pending next : Run Value) (rest : List (Run Value))
     (hlower : pending.range.val.lo ≤ next.range.val.lo)
     (hoverlap : next.range.val.lo ≤ pending.range.val.hi)
@@ -182,14 +189,15 @@ private lemma scanForward_spec {Value : Type*} [DecidableEq Value]
       by_cases hexact : next.range.val.lo = pending.range.val.lo ∧
           pending.value = next.value ∧
           pending.range.val.hi ≤ next.range.val.hi
-      · simp only [hexact, ↓reduceDIte]
+      · simp only [hexact]
         exact ⟨hcanonical,
-          exactCover_toFunction pending next rest hexact.1 hexact.2.1 hexact.2.2⟩
-      · simp only [hexact, ↓reduceDIte]
+          sameValueExactCover_toFunction pending next rest
+            hexact.1 hexact.2.1 hexact.2.2⟩
+      · simp only [hexact]
         by_cases hsame : pending.value = next.value
         · simp only [hsame, ↓reduceDIte]
           by_cases htouch : next.range.val.lo ≤ pending.range.val.hi + 1
-          · simp only [htouch, ↓reduceDIte]
+          · simp only [htouch]
             have hlowerMerged : ∀ run ∈ rest,
                 (mergeForward pending next).range.val.lo ≤ run.range.val.lo := by
               simpa [mergeForward] using hlowerRest
@@ -197,7 +205,7 @@ private lemma scanForward_spec {Value : Type*} [DecidableEq Value]
             refine ⟨hspec.1, ?_⟩
             exact hspec.2.trans
               (mergeForward_toFunction pending next rest hlowerNext htouch hsame)
-          · simp only [htouch, ↓reduceDIte]
+          · simp only [htouch]
             have hgap : pending.range.val.hi + 1 < next.range.val.lo := by omega
             have hbeforeNext : Run.before pending next := by
               refine ⟨?_, ?_⟩
@@ -240,12 +248,13 @@ private lemma scanForward_spec {Value : Type*} [DecidableEq Value]
                 rcases List.mem_cons.mp hrun with rfl | hrun
                 · exact hpendingResidual
                 · exact Run.before_trans hpendingResidual (hresidualAll run hrun)
-              · exact rightResidual_toFunction pending next rest hlowerNext hoverlap hextends
+              · exact rightResidualSplit_toFunction
+                  pending next rest hlowerNext hoverlap hextends
             · simp only [hextends, ↓reduceDIte]
               have hspec := ih pending hcanonicalRest hlowerRest
               refine ⟨hspec.1, ?_⟩
               exact hspec.2.trans
-                (deleteCovered_toFunction pending next rest hlowerNext (by omega))
+                (coveredRunDeletion_toFunction pending next rest hlowerNext (by omega))
           · simp only [hoverlap, ↓reduceDIte]
             have hbeforeNext : Run.before pending next := by
               refine ⟨?_, ?_⟩
@@ -283,7 +292,7 @@ private lemma scanForward_preserves_left_boundary {Value : Type*} [DecidableEq V
         by_cases hsame : pending.value = next.value
         · simp only [hsame, ↓reduceDIte]
           by_cases htouch : next.range.val.lo ≤ pending.range.val.hi + 1
-          · simp only [htouch, ↓reduceDIte]
+          · simp only [htouch]
             apply ih (mergeForward pending next)
             · constructor
               · simpa [mergeForward, Run.disjointBefore] using hpending.1
@@ -352,7 +361,8 @@ private lemma strictStartSuffix_lower_bound {Value : Type*}
         · exact (not_lt.mp hfirst).trans
             (Run.before_lo_lt (List.rel_of_pairwise_cons hcanonical hmem)).le
 
-private lemma runsToFunction_eq_none_of_key_before {Value : Type*}
+/-- A suffix whose runs start at or after `start` has no value below `start`. -/
+private lemma runsToFunction_eq_none_belowLowerBound {Value : Type*}
     (runs : List (Run Value)) (start key : Int)
     (hlower : ∀ run ∈ runs, start ≤ run.range.val.lo)
     (hkey : key < start) : runsToFunction runs key = none := by
@@ -365,6 +375,8 @@ private lemma runsToFunction_eq_none_of_key_before {Value : Type*}
       rw [runsToFunction_cons, if_neg hnot]
       exact ih (fun candidate hmem => hlower candidate (by simp [hmem]))
 
+/-- Prepending an inserted run to a suffix beginning at its lower bound realizes
+pointwise overwrite on that suffix. -/
 private lemma insertedSuffix_toFunction {Value : Type*}
     (suffix : List (Run Value)) (input : IntRange) (value : Value)
     (hnonempty : input.lo ≤ input.hi)
@@ -376,10 +388,13 @@ private lemma insertedSuffix_toFunction {Value : Type*}
   by_cases hin : input.lo ≤ key ∧ key ≤ input.hi
   · simp [hin, overwrite]
   · by_cases hkey : key < input.lo
-    · have hsuffix := runsToFunction_eq_none_of_key_before suffix input.lo key hlower hkey
+    · have hsuffix := runsToFunction_eq_none_belowLowerBound
+        suffix input.lo key hlower hkey
       simp [hin, overwrite, hsuffix]
     · simp [hin, overwrite]
 
+/-- An untouched prefix ending before the input can be prepended to a proved
+tail overwrite. -/
 private lemma prepend_left_of_overwrite {Value : Type*}
     (leftPrefix oldTail newTail : List (Run Value))
     (input : IntRange) (value : Value)
@@ -407,6 +422,8 @@ private lemma prepend_left_of_overwrite {Value : Type*}
         rw [congrFun ih' key]
         simp [overwrite, hcontains]
 
+/-- Trimming an overlapping differently-valued predecessor into residuals and
+inserting the new run has exact overwrite semantics. -/
 private lemma replacePredecessor_toFunction {Value : Type*}
     (prev : Run Value) (after : List (Run Value))
     (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi)
@@ -428,7 +445,7 @@ private lemma replacePredecessor_toFunction {Value : Type*}
       have hinput : ¬ (input.lo ≤ key ∧ key ≤ input.hi) := by omega
       simp [leftResidualBefore, hleft, hprev, hinput, overwrite]
     · by_cases hinput : input.lo ≤ key ∧ key ≤ input.hi
-      · simp [leftResidualBefore, rightResidualAfter, hleft, hinput, overwrite]
+      · simp [leftResidualBefore, hleft, hinput, overwrite]
       · have hequiv :
             (input.hi + 1 ≤ key ∧ key ≤ prev.range.val.hi) ↔
               (prev.range.val.lo ≤ key ∧ key ≤ prev.range.val.hi) := by
@@ -450,13 +467,14 @@ private lemma replacePredecessor_toFunction {Value : Type*}
           omega
         simp [leftResidualBefore, hleft, hinput, hprev, overwrite]
 
+/-- Merging a touching same-valued predecessor with the input has exact
+overwrite semantics. -/
 private lemma mergePredecessor_toFunction {Value : Type*}
     (prev : Run Value) (after : List (Run Value))
     (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi)
     (hstart : prev.range.val.lo ≤ input.lo)
     (hsame : prev.value = value)
-    (htouch : input.lo ≤ prev.range.val.hi + 1)
-    (hextends : prev.range.val.hi < input.hi) :
+    (htouch : input.lo ≤ prev.range.val.hi + 1) :
     runsToFunction
         (mergeForward prev { range := ⟨input, hnonempty⟩, value := value } :: after) =
       overwrite (runsToFunction (prev :: after)) input value := by
@@ -466,9 +484,7 @@ private lemma mergePredecessor_toFunction {Value : Type*}
   · have hmerged : prev.range.val.lo ≤ key ∧
         key ≤ max prev.range.val.hi input.hi :=
       ⟨hprev.1, hprev.2.trans (le_max_left _ _)⟩
-    have hinput : (input.lo ≤ key ∧ key ≤ input.hi) →
-        some value = some prev.value := by simp [hsame]
-    simp [mergeForward, hprev, hmerged, overwrite, hinput, hsame]
+    simp [mergeForward, hprev, hmerged, overwrite, hsame]
   · by_cases hinput : input.lo ≤ key ∧ key ≤ input.hi
     · have hmerged : prev.range.val.lo ≤ key ∧
           key ≤ max prev.range.val.hi input.hi := by
@@ -661,7 +677,7 @@ private theorem internalAddCMapRuns_spec {Value : Type*} [DecidableEq Value]
             hscan.2.trans (by
               simpa [merged, inserted] using
                 mergePredecessor_toFunction prev after input value hnonempty
-                  hprevStart.le hsame htouch hextends)
+                  hprevStart.le hsame htouch)
           have hall := prepend_left_of_overwrite before.dropLast
             (prev :: after) (scanForward merged after) input value
               hinitLeftOfInput htail
