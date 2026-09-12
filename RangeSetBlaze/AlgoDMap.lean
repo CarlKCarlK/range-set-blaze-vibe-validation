@@ -1315,4 +1315,284 @@ theorem internalAddDMap_toFunction {Value : Type*} [DecidableEq Value]
     exact (internalAddDMapRuns_preserves_canonical_and_overwrite
       map.runs input value (by omega) map.canonical).2
 
+/-! ## Algo DMap with cached length -/
+
+/-- The public result of cursor-shaped map insertion with explicit cached key
+cardinality. -/
+structure DMapLenResult (Value : Type*) where
+  mapResult : RangeMapBlaze Value
+  cachedLength : Nat
+
+/-- Proof-free run-list output used by the cached cursor model. -/
+private structure DMapLenRawResult (Value : Type*) where
+  runs : List (Run Value)
+  cachedLength : Nat
+
+/-- The cursor scan state plus the absolute cache after all removed successors
+have been subtracted. The pending and optional residual are counted later only
+when the production cursor inserts them. -/
+private structure DMapLenScanResult (Value : Type*) where
+  pending : Run Value
+  rightResidual : Option (Run Value)
+  remaining : List (Run Value)
+  unchanged : Bool
+  cachedLength : Nat
+
+/-- Count the pending run exactly when it is not already stored to the left of
+the cursor. -/
+private def countPendingIfFresh {Value : Type*}
+    (pendingIsStored : Bool) (cachedLength : Nat) (pending : Run Value) : Nat :=
+  if pendingIsStored then cachedLength else cachedLength + pending.cardinality
+
+/-- Cursor-local forward scan with the production add/subtract ordering.
+
+Every consumed successor is subtracted in full. A stored pending run receives
+only a right-extension addition; a fresh pending run and a returned right
+residual remain uncounted until final cursor insertion. -/
+private def scanForwardDMapLen {Value : Type*} [DecidableEq Value]
+    (pending : Run Value) (pendingIsStored : Bool) (cachedLength : Nat) :
+    List (Run Value) → DMapLenScanResult Value
+  | [] =>
+      { pending, rightResidual := none, remaining := [], unchanged := false,
+        cachedLength }
+  | next :: rest =>
+      if !pendingIsStored && next.range.val.lo = pending.range.val.lo &&
+          next.value = pending.value && pending.range.val.hi ≤ next.range.val.hi then
+        { pending, rightResidual := none, remaining := next :: rest,
+          unchanged := true, cachedLength }
+      else
+        match classifyForward pending.range.val.hi pending.value next with
+        | none =>
+            { pending, rightResidual := none, remaining := next :: rest,
+              unchanged := false, cachedLength }
+        | some .mergeSame =>
+            let merged := mergeForward pending next
+            let afterRemoval := cachedLength - next.cardinality
+            let afterExtension :=
+              if pendingIsStored && pending.range.val.hi < next.range.val.hi then
+                afterRemoval + IntRange.rightExtensionCardinality
+                  pending.range.val.hi next.range.val.hi
+              else afterRemoval
+            scanForwardDMapLen merged pendingIsStored afterExtension rest
+        | some .deleteOverwritten =>
+            scanForwardDMapLen pending pendingIsStored
+              (cachedLength - next.cardinality) rest
+        | some (.keepRightResidual residual) =>
+            { pending, rightResidual := some residual, remaining := rest,
+              unchanged := false,
+              cachedLength := cachedLength - next.cardinality }
+termination_by suffix => suffix.length
+
+/-- Perform the cursor insertions that follow a completed forward scan. -/
+private def finishDMapLenScan {Value : Type*}
+    (pendingIsStored : Bool) (scan : DMapLenScanResult Value) :
+    DMapLenRawResult Value :=
+  if scan.unchanged then
+    ⟨scan.remaining, scan.cachedLength⟩
+  else
+    let afterPending := countPendingIfFresh
+      pendingIsStored scan.cachedLength scan.pending
+    let afterResidual := scan.rightResidual.elim afterPending
+      (fun residual => afterPending + residual.cardinality)
+    ⟨scanOutput {
+        pending := scan.pending
+        rightResidual := scan.rightResidual
+        remaining := scan.remaining
+        unchanged := scan.unchanged },
+      afterResidual⟩
+
+/-- Proof-free DMapLen control flow. This is `internalAddDMapRuns` plus the
+absolute cache mutations of the production Rust cursor path. -/
+private def internalAddDMapLenRaw {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi) :
+    DMapLenRawResult Value :=
+  let gap := lowerBoundGap input.lo runs
+  let fresh : Run Value := ⟨⟨input, hinput⟩, value⟩
+  match gap.peekPrev with
+  | none =>
+      let scan := scanForwardDMapLen fresh false cachedLength gap.right
+      if scan.unchanged then ⟨runs, cachedLength⟩
+      else
+        let finished := finishDMapLenScan false scan
+        ⟨gap.left ++ finished.runs, finished.cachedLength⟩
+  | some predecessor =>
+      match classifyPredecessor input.lo input.hi value predecessor with
+      | .unaffected =>
+          let scan := scanForwardDMapLen fresh false cachedLength gap.right
+          if scan.unchanged then ⟨runs, cachedLength⟩
+          else
+            let finished := finishDMapLenScan false scan
+            ⟨gap.left ++ finished.runs, finished.cachedLength⟩
+      | .mergeSame =>
+          if input.hi ≤ predecessor.range.val.hi then ⟨runs, cachedLength⟩
+          else
+            let grown := mergeForward predecessor fresh
+            let afterExtension := cachedLength +
+              IntRange.rightExtensionCardinality
+                predecessor.range.val.hi input.hi
+            let scan := scanForwardDMapLen grown true afterExtension gap.right
+            if scan.unchanged then ⟨runs, cachedLength⟩
+            else
+              let finished := finishDMapLenScan true scan
+              ⟨gap.left.dropLast ++ finished.runs, finished.cachedLength⟩
+      | .trimDifferent left rightResidual =>
+          let afterTrim := cachedLength -
+            IntRange.cardinality { lo := input.lo, hi := predecessor.range.val.hi }
+          match rightResidual with
+          | some residual =>
+              ⟨gap.left.dropLast ++ left :: fresh :: residual :: gap.right,
+                afterTrim + fresh.cardinality + residual.cardinality⟩
+          | none =>
+              let scan := scanForwardDMapLen fresh false afterTrim gap.right
+              if scan.unchanged then
+                ⟨gap.left.dropLast ++ left :: gap.right, afterTrim⟩
+              else
+                let finished := finishDMapLenScan false scan
+                ⟨gap.left.dropLast ++ left :: finished.runs,
+                  finished.cachedLength⟩
+
+/-- Trimming a predecessor removes exactly the overwritten tail and retains
+the left residual. -/
+private lemma leftResidualBefore_cardinality
+    {Value : Type*} (start : Int) (run : Run Value)
+    (hstart : run.range.val.lo < start) (hoverlap : start ≤ run.range.val.hi) :
+    run.cardinality =
+      (leftResidualBefore start run hstart).cardinality +
+        IntRange.cardinality { lo := start, hi := run.range.val.hi } := by
+  simpa [Run.cardinality, leftResidualBefore] using
+    IntRange.cardinality_eq_left_residual_add_tail
+      run.range.val.lo start run.range.val.hi hstart hoverlap
+
+/-- Removing an overhanging successor and reinserting its right residual
+partitions the old successor into overwritten and retained cardinalities. -/
+private lemma rightResidualAfter_cardinality
+    {Value : Type*} (stop : Int) (run : Run Value)
+    (hlower : run.range.val.lo ≤ stop) (hextends : stop < run.range.val.hi) :
+    run.cardinality =
+      IntRange.cardinality { lo := run.range.val.lo, hi := stop } +
+        (rightResidualAfter stop run hextends).cardinality := by
+  simpa [Run.cardinality, rightResidualAfter] using
+    IntRange.cardinality_eq_prefix_add_right_residual
+      run.range.val.lo stop run.range.val.hi hlower hextends
+
+/-- A predecessor surrounding the input is partitioned into its left residual,
+the overwritten input, and its right residual. -/
+private lemma twoSidedPredecessorSplit_cardinality
+    {Value : Type*} (input : IntRange) (run : Run Value)
+    (hstart : run.range.val.lo < input.lo)
+    (hnonempty : input.lo ≤ input.hi) (hextends : input.hi < run.range.val.hi) :
+    run.cardinality =
+      (leftResidualBefore input.lo run hstart).cardinality + input.cardinality +
+        (rightResidualAfter input.hi run hextends).cardinality := by
+  simpa [Run.cardinality, leftResidualBefore, rightResidualAfter] using
+    IntRange.cardinality_eq_left_add_middle_add_right
+      run.range.val.lo run.range.val.hi input hstart hnonempty hextends
+
+/-- The cached forward cursor scan erases exactly to Algo DMap's scan, stops at
+the same continuation flag, and preserves an absolute-cache decomposition over
+the untouched base.
+
+The `unchanged` agreement is what lets the raw dispatcher align its own
+early-return branches with `internalAddDMapRuns`: the exact same-value cover
+short-circuit is the only place the two recursions can stop differently. The
+cache invariant says that above the untouched `base`, the running cache counts
+exactly the suffix plus the pending run when that run is already stored. Rust's
+documented cursor invariant that a stored pending starts strictly before every
+suffix run is not needed here, because the fast path is already guarded by
+`!pendingIsStored`. -/
+private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
+    {Value : Type*} [DecidableEq Value]
+    (pending : Run Value) (pendingIsStored : Bool)
+    (suffix : List (Run Value)) (cachedLength : Nat) :
+    let scan := scanForwardDMapLen
+      pending pendingIsStored cachedLength suffix
+    let algo := scanForward pending pendingIsStored suffix
+    let finished := finishDMapLenScan pendingIsStored scan
+    scan.unchanged = algo.unchanged ∧
+      finished.runs = scanOutput algo ∧
+      ∀ base, cachedLength = base +
+          (if pendingIsStored then pending.cardinality else 0) +
+            runsCardinality suffix →
+        finished.cachedLength = base + runsCardinality finished.runs := by
+  sorry
+
+/-- Erasing DMapLen bookkeeping gives exactly Algo DMap's raw run output. -/
+private theorem internalAddDMapLenRaw_corresponds
+    {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi) :
+    (internalAddDMapLenRaw runs cachedLength input value hinput).runs =
+      internalAddDMapRuns runs input value hinput := by
+  sorry
+
+/-- Branch-local cursor bookkeeping computes the raw output cardinality when
+the incoming absolute cache is valid. -/
+private theorem internalAddDMapLenRaw_preserves_cardinality
+    {Value : Type*} [DecidableEq Value]
+    (runs : List (Run Value)) (cachedLength : Nat)
+    (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi)
+    (hcanonical : Canonical runs)
+    (hlength : cachedLength = runsCardinality runs) :
+    (internalAddDMapLenRaw runs cachedLength input value hinput).cachedLength =
+      runsCardinality
+        (internalAddDMapLenRaw runs cachedLength input value hinput).runs := by
+  sorry
+
+/-- Cursor-shaped map insertion with production explicit cached key count. -/
+def internalAddDMapLen {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) : DMapLenResult Value := by
+  if h : input.hi < input.lo then
+    exact ⟨map, cachedLength⟩
+  else
+    have hinput : input.lo ≤ input.hi := by omega
+    let raw := internalAddDMapLenRaw map.runs cachedLength input value hinput
+    have hruns : raw.runs = internalAddDMapRuns map.runs input value hinput :=
+      internalAddDMapLenRaw_corresponds
+        map.runs cachedLength input value hinput
+    have hcanonical : Canonical raw.runs := by
+      rw [hruns]
+      exact (internalAddDMapRuns_preserves_canonical_and_overwrite
+        map.runs input value hinput map.canonical).1
+    exact ⟨⟨raw.runs, hcanonical⟩, raw.cachedLength⟩
+
+/-- DMapLen's map component is exactly Algo DMap's result representation. -/
+theorem internalAddDMapLen_mapResult {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) :
+    (internalAddDMapLen map cachedLength input value).mapResult =
+      internalAddDMap map input value := by
+  unfold internalAddDMapLen internalAddDMap
+  by_cases hempty : input.hi < input.lo
+  · simp [hempty]
+  · simp only [dif_neg hempty]
+    rw [RangeMapBlaze.mk.injEq]
+    exact internalAddDMapLenRaw_corresponds
+      map.runs cachedLength input value (by omega)
+
+/-- A valid incoming cached key count remains valid after DMapLen insertion. -/
+theorem internalAddDMapLen_cachedLength {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value)
+    (hlength : cachedLength = map.cardinality) :
+    (internalAddDMapLen map cachedLength input value).cachedLength =
+      (internalAddDMapLen map cachedLength input value).mapResult.cardinality := by
+  unfold internalAddDMapLen
+  by_cases hempty : input.hi < input.lo
+  · simpa [hempty, RangeMapBlaze.cardinality] using hlength
+  · simp only [dif_neg hempty]
+    exact internalAddDMapLenRaw_preserves_cardinality map.runs cachedLength
+      input value (by omega) map.canonical
+      (by simpa [RangeMapBlaze.cardinality] using hlength)
+
+/-- DMapLen inherits Algo DMap's exact pointwise overwrite semantics. -/
+theorem internalAddDMapLen_toFunction {Value : Type*} [DecidableEq Value]
+    (map : RangeMapBlaze Value) (cachedLength : Nat)
+    (input : IntRange) (value : Value) :
+    (internalAddDMapLen map cachedLength input value).mapResult.toFunction =
+      overwrite map.toFunction input value := by
+  rw [internalAddDMapLen_mapResult]
+  exact internalAddDMap_toFunction map input value
+
 end RangeMapBlaze

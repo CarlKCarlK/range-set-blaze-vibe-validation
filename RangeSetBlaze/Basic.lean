@@ -44,6 +44,60 @@ def rightExtensionCardinality (oldEnd newEnd : Int) : Nat :=
     r.cardinality = 0 := by
   simp [cardinality, not_le.mpr h]
 
+/-- Splitting a nonempty interval immediately before `start` partitions its
+cardinality into the retained left residual and the tail beginning at
+`start`. -/
+lemma cardinality_eq_left_residual_add_tail
+    (lo start hi : Int) (hstart : lo < start) (hoverlap : start ≤ hi) :
+    cardinality { lo, hi } =
+      cardinality { lo, hi := start - 1 } + cardinality { lo := start, hi } := by
+  rw [cardinality_of_nonempty (show lo ≤ hi by omega)]
+  rw [cardinality_of_nonempty (show lo ≤ start - 1 by omega)]
+  rw [cardinality_of_nonempty hoverlap]
+  simp only
+  rw [← Int.toNat_add (show 0 ≤ start - 1 - lo + 1 by omega)
+    (show 0 ≤ hi - start + 1 by omega)]
+  congr 1
+  omega
+
+/-- Splitting a nonempty interval immediately after `stop` partitions its
+cardinality into the prefix through `stop` and the retained right residual. -/
+lemma cardinality_eq_prefix_add_right_residual
+    (lo stop hi : Int) (hlower : lo ≤ stop) (hextends : stop < hi) :
+    cardinality { lo, hi } =
+      cardinality { lo, hi := stop } + cardinality { lo := stop + 1, hi } := by
+  rw [cardinality_of_nonempty (show lo ≤ hi by omega)]
+  rw [cardinality_of_nonempty hlower]
+  rw [cardinality_of_nonempty (show stop + 1 ≤ hi by omega)]
+  simp only
+  rw [← Int.toNat_add (show 0 ≤ stop - lo + 1 by omega)
+    (show 0 ≤ hi - (stop + 1) + 1 by omega)]
+  congr 1
+  omega
+
+/-- A containing interval is the disjoint cardinality sum of the left
+residual, a nonempty middle interval, and the right residual. -/
+lemma cardinality_eq_left_add_middle_add_right
+    (lo hi : Int) (middle : IntRange)
+    (hstart : lo < middle.lo) (hnonempty : middle.lo ≤ middle.hi)
+    (hextends : middle.hi < hi) :
+    cardinality { lo, hi } =
+      cardinality { lo, hi := middle.lo - 1 } + middle.cardinality +
+        cardinality { lo := middle.hi + 1, hi } := by
+  rw [cardinality_of_nonempty (show lo ≤ hi by omega)]
+  rw [cardinality_of_nonempty (show lo ≤ middle.lo - 1 by omega)]
+  rw [cardinality_of_nonempty hnonempty]
+  rw [cardinality_of_nonempty (show middle.hi + 1 ≤ hi by omega)]
+  simp only
+  rw [← Int.toNat_add (show 0 ≤ middle.lo - 1 - lo + 1 by omega)
+    (show 0 ≤ middle.hi - middle.lo + 1 by omega)]
+  rw [← Int.toNat_add
+    (show 0 ≤
+      (middle.lo - 1 - lo + 1) + (middle.hi - middle.lo + 1) by omega)
+    (show 0 ≤ hi - (middle.hi + 1) + 1 by omega)]
+  congr 1
+  omega
+
 /-- The set view is empty iff `hi < lo`. -/
 @[simp]
 lemma toSet_eq_empty_iff (r : IntRange) :

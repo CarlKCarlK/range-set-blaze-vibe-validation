@@ -1074,15 +1074,9 @@ private lemma leftResidualBefore_cardinality
     run.cardinality =
       (leftResidualBefore start run hstart).cardinality +
         IntRange.cardinality { lo := start, hi := run.range.val.hi } := by
-  have hrun := run.range.property
-  rw [Run.cardinality, Run.cardinality, IntRange.cardinality_of_nonempty hrun]
-  rw [IntRange.cardinality_of_nonempty (show run.range.val.lo ≤ start - 1 by omega)]
-  rw [IntRange.cardinality_of_nonempty hoverlap]
-  simp only [leftResidualBefore]
-  rw [← Int.toNat_add (show 0 ≤ start - 1 - run.range.val.lo + 1 by omega)
-    (show 0 ≤ run.range.val.hi - start + 1 by omega)]
-  congr 1
-  omega
+  simpa [Run.cardinality, leftResidualBefore] using
+    IntRange.cardinality_eq_left_residual_add_tail
+      run.range.val.lo start run.range.val.hi hstart hoverlap
 
 /-- Removing an overhanging successor and reinserting its right residual
 partitions the old successor into overwritten and retained cardinalities. -/
@@ -1092,15 +1086,9 @@ private lemma rightResidualAfter_cardinality
     run.cardinality =
       IntRange.cardinality { lo := run.range.val.lo, hi := stop } +
         (rightResidualAfter stop run hextends).cardinality := by
-  have hrun := run.range.property
-  rw [Run.cardinality, Run.cardinality, IntRange.cardinality_of_nonempty hrun]
-  rw [IntRange.cardinality_of_nonempty hlower]
-  rw [IntRange.cardinality_of_nonempty (show stop + 1 ≤ run.range.val.hi by omega)]
-  simp only [rightResidualAfter]
-  rw [← Int.toNat_add (show 0 ≤ stop - run.range.val.lo + 1 by omega)
-    (show 0 ≤ run.range.val.hi - (stop + 1) + 1 by omega)]
-  congr 1
-  omega
+  simpa [Run.cardinality, rightResidualAfter] using
+    IntRange.cardinality_eq_prefix_add_right_residual
+      run.range.val.lo stop run.range.val.hi hlower hextends
 
 /-- A predecessor surrounding the input is partitioned into the left
 residual, overwritten middle, and right residual. -/
@@ -1112,25 +1100,9 @@ private lemma twoSidedPredecessorSplit_cardinality
       (leftResidualBefore input.lo run hstart).cardinality +
         input.cardinality +
           (rightResidualAfter input.hi run hextends).cardinality := by
-  have hrun := run.range.property
-  rw [Run.cardinality, Run.cardinality, Run.cardinality]
-  rw [IntRange.cardinality_of_nonempty hrun]
-  rw [IntRange.cardinality_of_nonempty
-    (show run.range.val.lo ≤ input.lo - 1 by omega)]
-  rw [IntRange.cardinality_of_nonempty hnonempty]
-  rw [IntRange.cardinality_of_nonempty
-    (show input.hi + 1 ≤ run.range.val.hi by omega)]
-  simp only [leftResidualBefore, rightResidualAfter]
-  rw [← Int.toNat_add
-    (show 0 ≤ input.lo - 1 - run.range.val.lo + 1 by omega)
-    (show 0 ≤ input.hi - input.lo + 1 by omega)]
-  rw [← Int.toNat_add
-    (show 0 ≤
-      (input.lo - 1 - run.range.val.lo + 1) +
-        (input.hi - input.lo + 1) by omega)
-    (show 0 ≤ run.range.val.hi - (input.hi + 1) + 1 by omega)]
-  congr 1
-  omega
+  simpa [Run.cardinality, leftResidualBefore, rightResidualAfter] using
+    IntRange.cardinality_eq_left_add_middle_add_right
+      run.range.val.lo run.range.val.hi input hstart hnonempty hextends
 
 /-- The cached scan erases exactly to `scanForward`, while its cache equals
 the cardinality of the emitted runs above an untouched base. The hypothesis
