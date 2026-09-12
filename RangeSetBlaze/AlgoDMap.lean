@@ -120,14 +120,6 @@ private def scanOutput {Value : Type*} (scan : ScanResult (Value := Value)) :
   if scan.unchanged then scan.remaining
   else scan.pending :: scan.rightResidual.toList ++ scan.remaining
 
-private def insertBefore {Value : Type*}
-    (gap : CursorGap Value) (pending : Run Value) (right : List (Run Value)) :
-    List (Run Value) := gap.left ++ pending :: right
-
-private def replaceStoredPredecessor {Value : Type*}
-    (gap : CursorGap Value) (pending : Run Value) (right : List (Run Value)) :
-    List (Run Value) := gap.left.dropLast ++ pending :: right
-
 private def internalAddDMapRuns {Value : Type*} [DecidableEq Value]
     (runs : List (Run Value)) (input : IntRange) (value : Value)
     (hinput : input.lo ≤ input.hi) : List (Run Value) :=
@@ -161,7 +153,7 @@ private def internalAddDMapRuns {Value : Type*} [DecidableEq Value]
 
 /-- Runs in the right side of the cursor gap start at or after its lower
 bound. -/
-private lemma strict_start_split_suffix_lower_bound {Value : Type*}
+private lemma strictStartSuffix_lowerBound {Value : Type*}
     (runs : List (Run Value)) (start : Int) (hcanonical : Canonical runs) :
     ∀ run ∈ (List.span (fun candidate =>
       decide (candidate.range.val.lo < start)) runs).snd,
@@ -180,7 +172,7 @@ private lemma strict_start_split_suffix_lower_bound {Value : Type*}
         · exact (not_lt.mp hfirst).trans
             (Run.before_lo_lt (List.rel_of_pairwise_cons hcanonical hmem)).le
 
-private theorem lowerBoundGap_spec
+private theorem lowerBoundGap_decomposition
     {Value : Type*} (runs : List (Run Value)) (start : Int)
     (hcanonical : Canonical runs) :
     let gap := lowerBoundGap start runs
@@ -201,10 +193,10 @@ private theorem lowerBoundGap_spec
         decide (candidate.range.val.lo < start)) hrun')
   have hright : ∀ run ∈ split.snd, start ≤ run.range.val.lo := by
     simpa [split, List.span_eq_takeWhile_dropWhile] using
-      strict_start_split_suffix_lower_bound runs start hcanonical
+      strictStartSuffix_lowerBound runs start hcanonical
   exact ⟨hdecomp.symm, hleft, hright⟩
 
-private theorem cursor_predecessor_mutation_spec
+private theorem predecessorTrim_preserves_toFunction
     {Value : Type*}
     (predecessor : Run Value) (input : IntRange) (value : Value)
     (hinput : input.lo ≤ input.hi)
@@ -267,7 +259,7 @@ private lemma mergeForward_toFunction {Value : Type*}
       rw [if_neg hmerged, if_neg hpending, if_neg hnext]
 
 /-- The unstored exact-start fast path preserves the pending function. -/
-private lemma exactCover_toFunction {Value : Type*}
+private lemma sameValueExactCover_toFunction {Value : Type*}
     (pending next : Run Value) (rest : List (Run Value))
     (hlo : next.range.val.lo = pending.range.val.lo)
     (hsame : pending.value = next.value)
@@ -480,7 +472,7 @@ private theorem scanForward_preserves_canonical_and_overwrite
               (show Canonical (next :: rest) ∧
                 runsToFunction (next :: rest) =
                   runsToFunction (pending :: next :: rest) from
-                ⟨hcanonical, exactCover_toFunction pending next rest
+                ⟨hcanonical, sameValueExactCover_toFunction pending next rest
                   hexact.1.1 hexact.1.2.symm hexact.2⟩)
           · simpa [scanForward, hexact] using hcontinue false
       | true =>
@@ -629,7 +621,7 @@ private lemma insertedSuffix_toFunction {Value : Type*}
       simp [hin, overwrite, hsuffix]
     · simp [hin, overwrite]
 
-private lemma prepend_left_of_overwrite {Value : Type*}
+private lemma prependLeft_preserves_overwrite {Value : Type*}
     (leftPrefix oldTail newTail : List (Run Value))
     (input : IntRange) (value : Value)
     (hleft : ∀ run ∈ leftPrefix, run.range.val.hi < input.lo)
@@ -655,7 +647,7 @@ private lemma prepend_left_of_overwrite {Value : Type*}
         rw [congrFun ih' key]
         simp [overwrite, hcontains]
 
-private lemma mergePredecessor_toFunction {Value : Type*}
+private lemma predecessorMerge_preserves_overwrite {Value : Type*}
     (predecessor : Run Value) (suffix : List (Run Value))
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi)
     (hstart : predecessor.range.val.lo ≤ input.lo)
@@ -696,7 +688,7 @@ private lemma mergePredecessor_toFunction {Value : Type*}
       rw [if_neg hmerged]
       simp [overwrite, hinputRange, hpredecessor]
 
-private lemma predecessor_split_toFunction {Value : Type*}
+private lemma predecessorSplit_preserves_overwrite {Value : Type*}
     (predecessor : Run Value) (suffix : List (Run Value))
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi)
     (hstart : predecessor.range.val.lo < input.lo)
@@ -725,7 +717,7 @@ private lemma predecessor_split_toFunction {Value : Type*}
       simp [leftResidualBefore, rightResidualAfter, hleft, hinputRange,
         hequiv, overwrite]
 
-private lemma trimPredecessor_toFunction {Value : Type*}
+private lemma predecessorTrim_preserves_overwrite {Value : Type*}
     (predecessor : Run Value) (suffix : List (Run Value))
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi)
     (hstart : predecessor.range.val.lo < input.lo)
@@ -735,7 +727,7 @@ private lemma trimPredecessor_toFunction {Value : Type*}
         (leftResidualBefore input.lo predecessor hstart ::
           { range := ⟨input, hinput⟩, value := value } :: suffix) =
       overwrite (runsToFunction (predecessor :: suffix)) input value := by
-  have hmutation := cursor_predecessor_mutation_spec predecessor input value
+  have hmutation := predecessorTrim_preserves_toFunction predecessor input value
     hinput hstart hnoGap hcover
   funext key
   simp only [runsToFunction_cons]
@@ -803,7 +795,7 @@ private lemma scanForward_unchanged_toFunction {Value : Type*} [DecidableEq Valu
           (Run.before_lo_lt (List.rel_of_pairwise_cons hcanonical hrun))
       by_cases hexact : (next.range.val.lo = pending.range.val.lo ∧
           next.value = pending.value) ∧ pending.range.val.hi ≤ next.range.val.hi
-      · exact exactCover_toFunction pending next rest
+      · exact sameValueExactCover_toFunction pending next rest
           hexact.1.1 hexact.1.2.symm hexact.2
       · simp [scanForward, hexact] at hunchanged
         generalize haction : classifyForward pending.range.val.hi pending.value next = action
@@ -823,7 +815,7 @@ private lemma scanForward_unchanged_toFunction {Value : Type*} [DecidableEq Valu
                 simp [hfalse] at hunchanged
             | keepRightResidual residual => simp at hunchanged
 
-private lemma insertAtGap_preserves_canonical_and_overwrite
+private lemma gapInsertion_preserves_canonical_and_overwrite
     {Value : Type*} [DecidableEq Value]
     (left right : List (Run Value)) (input : IntRange) (value : Value)
     (hinput : input.lo ≤ input.hi)
@@ -861,7 +853,7 @@ private lemma insertAtGap_preserves_canonical_and_overwrite
         (by simpa [fresh] using hlowerRight) hunchanged).trans (by
           simpa [fresh] using
             insertedSuffix_toFunction right input value hinput hlowerRight)
-    exact prepend_left_of_overwrite left right right input value
+    exact prependLeft_preserves_overwrite left right right input value
       hleftOfInput htail
   · simp only [hunchanged, Bool.false_eq_true, ↓reduceIte]
     have hleftScan : ∀ l ∈ left,
@@ -877,7 +869,7 @@ private lemma insertAtGap_preserves_canonical_and_overwrite
       hscan.2.trans (by
         simpa [fresh] using
           insertedSuffix_toFunction right input value hinput hlowerRight)
-    exact prepend_left_of_overwrite left right
+    exact prependLeft_preserves_overwrite left right
       (scanOutput (scanForward fresh false right)) input value hleftOfInput htail
 
 private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
@@ -892,7 +884,7 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
   split <;> rename_i hprev
   · let gap := lowerBoundGap input.lo runs
     let fresh : Run Value := { range := ⟨input, hinput⟩, value := value }
-    have hgap := lowerBoundGap_spec runs input.lo hcanonical
+    have hgap := lowerBoundGap_decomposition runs input.lo hcanonical
     have hdecomp : runs = gap.left ++ gap.right := by
       simpa [gap] using hgap.1
     have hleftEmpty : gap.left = [] := by
@@ -904,7 +896,7 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
       simpa [hrightRuns] using hcanonical
     have hlowerRight : ∀ run ∈ gap.right, input.lo ≤ run.range.val.lo :=
       hgap.2.2
-    have hresult := insertAtGap_preserves_canonical_and_overwrite
+    have hresult := gapInsertion_preserves_canonical_and_overwrite
       gap.left gap.right input value hinput
       (by simp [hleftEmpty]) hcanonicalRight
       (by simp [hleftEmpty]) (by simp [hleftEmpty]) hlowerRight
@@ -914,7 +906,7 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
   · rename_i predecessor
     let gap := lowerBoundGap input.lo runs
     let fresh : Run Value := { range := ⟨input, hinput⟩, value := value }
-    have hgap := lowerBoundGap_spec runs input.lo hcanonical
+    have hgap := lowerBoundGap_decomposition runs input.lo hcanonical
     have hdecomp : runs = gap.left ++ gap.right := by
       simpa [gap] using hgap.1
     have hcanonicalWhole : Canonical (gap.left ++ gap.right) := by
@@ -979,7 +971,7 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
           run.range.val.hi < input.lo := by
         intro run hrun
         simpa [fresh] using Run.before_hi_lt (hleftFresh run hrun)
-      have hresult := insertAtGap_preserves_canonical_and_overwrite
+      have hresult := gapInsertion_preserves_canonical_and_overwrite
         gap.left gap.right input value hinput hcanonicalLeft hcanonicalRight
         (by simpa [fresh] using hleftFresh) hcross hlowerRight hleftOfInput
       simpa [hdecomp] using hresult
@@ -998,7 +990,7 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
             omega
           simp [runsToFunction_cons, overwrite, hin, hpredecessorContains, hsame]
         · simp [overwrite, hin]
-      have hall := prepend_left_of_overwrite gap.left.dropLast
+      have hall := prependLeft_preserves_overwrite gap.left.dropLast
         (predecessor :: gap.right) (predecessor :: gap.right)
         input value hinitLeftOfInput htail
       simpa [hrunsDecomp] using hall
@@ -1062,9 +1054,9 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
             overwrite (runsToFunction (predecessor :: gap.right)) input value :=
         hscan.2.trans (by
           simpa [grown, fresh] using
-            mergePredecessor_toFunction predecessor gap.right input value
+            predecessorMerge_preserves_overwrite predecessor gap.right input value
               hinput hpredecessorStart.le hsame hnoGap)
-      have hall := prepend_left_of_overwrite gap.left.dropLast
+      have hall := prependLeft_preserves_overwrite gap.left.dropLast
         (predecessor :: gap.right)
         (scanOutput (scanForward grown true gap.right))
         input value hinitLeftOfInput htail
@@ -1145,9 +1137,9 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
               runsToFunction (left :: fresh :: residual :: gap.right) =
                 overwrite (runsToFunction (predecessor :: gap.right)) input value := by
             simpa [left, residual, fresh] using
-              predecessor_split_toFunction predecessor gap.right input value hinput
+              predecessorSplit_preserves_overwrite predecessor gap.right input value hinput
                 hpredecessorStart hoverlap hextends
-          have hall := prepend_left_of_overwrite gap.left.dropLast
+          have hall := prependLeft_preserves_overwrite gap.left.dropLast
             (predecessor :: gap.right) (left :: fresh :: residual :: gap.right)
             input value hinitLeftOfInput htail
           simpa [gap, left, residual, fresh, hprev, CursorGap.peekPrev,
@@ -1216,10 +1208,10 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
                 split
                 · rfl
                 · simpa only [runsToFunction_cons] using congrFun hrightNoChange key
-              have hreplace := trimPredecessor_toFunction predecessor gap.right
+              have hreplace := predecessorTrim_preserves_overwrite predecessor gap.right
                 input value hinput hpredecessorStart hnoGap (by omega)
               have htail := hleftRightFunction.trans hreplace
-              have hall := prepend_left_of_overwrite gap.left.dropLast
+              have hall := prependLeft_preserves_overwrite gap.left.dropLast
                 (predecessor :: gap.right) (left :: gap.right)
                 input value hinitLeftOfInput htail
               simpa [gap, fresh, hprev, CursorGap.peekPrev, classifyPredecessor,
@@ -1255,10 +1247,10 @@ private theorem internalAddDMapRuns_preserves_canonical_and_overwrite
               split
               · rfl
               · simpa only [runsToFunction_cons] using congrFun hscan.2 key
-            have hreplace := trimPredecessor_toFunction predecessor gap.right
+            have hreplace := predecessorTrim_preserves_overwrite predecessor gap.right
               input value hinput hpredecessorStart hnoGap (by omega)
             have htail := hleftScanFunction.trans hreplace
-            have hall := prepend_left_of_overwrite gap.left.dropLast
+            have hall := prependLeft_preserves_overwrite gap.left.dropLast
               (predecessor :: gap.right)
               (left :: scanOutput (scanForward fresh false gap.right))
               input value hinitLeftOfInput htail
