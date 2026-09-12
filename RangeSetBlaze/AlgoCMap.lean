@@ -945,6 +945,14 @@ model below carries that absolute count through the same predecessor split and
 forward scan as `internalAddCMapRuns`. Stored ranges are subtracted in full
 when removed; retained residuals are then added back. A pending run contributes
 to the cache either while it remains stored or when it is finally inserted.
+
+This control flow corresponds exactly to Algo CMap and most closely mirrors
+the production cursor path. The production baseline path has additional
+same-start and predecessor-of-predecessor cases; its add/subtract sequence is
+therefore not branch-for-branch identical. Both paths normalize to replacing
+the affected old runs by the same residual and pending runs. The cardinality
+theorems below prove that normalized cache equation, rather than claiming the
+baseline uses the cursor-shaped branch decomposition.
 -/
 
 /-- The public result of production-shaped map insertion with explicit cached
@@ -1130,17 +1138,113 @@ describes whether pending is already present in the incoming absolute cache. -/
 private theorem scanForwardCMapLen_preserves_correspondence_and_cardinality
     {Value : Type*} [DecidableEq Value]
     (pending : Run Value) (pendingIsStored : Bool)
-    (suffix : List (Run Value)) (cachedLength base : Nat)
-    (hcache : cachedLength = base +
-      (if pendingIsStored then pending.cardinality else 0) +
-        runsCardinality suffix)
-    (hstoredStart : pendingIsStored = true →
-      ∀ run ∈ suffix, pending.range.val.lo < run.range.val.lo) :
+    (suffix : List (Run Value)) (cachedLength : Nat) :
     let result := scanForwardCMapLen
       pending pendingIsStored cachedLength suffix
     result.runs = scanForward pending suffix ∧
-      result.cachedLength = base + runsCardinality result.runs := by
-  sorry
+      ∀ base, cachedLength = base +
+          (if pendingIsStored then pending.cardinality else 0) +
+            runsCardinality suffix →
+        (pendingIsStored = true →
+          ∀ run ∈ suffix, pending.range.val.lo < run.range.val.lo) →
+        result.cachedLength = base + runsCardinality result.runs := by
+  induction suffix generalizing pending cachedLength with
+  | nil =>
+      cases pendingIsStored <;>
+        simp [scanForwardCMapLen, scanForward, countPendingIfFresh]
+  | cons next rest ih =>
+      unfold scanForwardCMapLen scanForward
+      by_cases hexact : next.range.val.lo = pending.range.val.lo ∧
+          pending.value = next.value ∧
+          pending.range.val.hi ≤ next.range.val.hi
+      · simp only [hexact]
+        refine ⟨rfl, ?_⟩
+        intro base hcache hstoredStart
+        cases hstored : pendingIsStored
+        · simp [hstored] at hcache ⊢
+          omega
+        · have hstart := hstoredStart hstored next (by simp)
+          exact (lt_irrefl pending.range.val.lo
+            (hexact.1 ▸ hstart)).elim
+      · simp only [hexact, if_false]
+        by_cases hsame : pending.value = next.value
+        · simp only [hsame, ↓reduceDIte]
+          by_cases htouch : next.range.val.lo ≤ pending.range.val.hi + 1
+          · simp only [htouch, if_true]
+            let merged := mergeForward pending next
+            let afterRemoval := cachedLength - next.cardinality
+            let afterExtension :=
+              if pendingIsStored ∧ pending.range.val.hi < next.range.val.hi then
+                afterRemoval + IntRange.rightExtensionCardinality
+                  pending.range.val.hi next.range.val.hi
+              else afterRemoval
+            have hrec := ih merged afterExtension
+            refine ⟨hrec.1, ?_⟩
+            intro base hcache hstoredStart
+            have hremoved : next.cardinality ≤ cachedLength := by
+              simp only [runsCardinality_cons] at hcache
+              omega
+            apply hrec.2 base
+            cases hstored : pendingIsStored
+            · simp [afterExtension, afterRemoval, hstored,
+                runsCardinality_cons] at hcache ⊢
+              omega
+            · simp only [hstored, if_true] at hcache ⊢
+              by_cases hextend : pending.range.val.hi < next.range.val.hi
+              · have hmergedCard : merged.cardinality = pending.cardinality +
+                    IntRange.rightExtensionCardinality
+                      pending.range.val.hi next.range.val.hi := by
+                  simpa [merged, mergeForward, Run.cardinality,
+                    max_eq_right hextend.le] using
+                    (IntRange.NR.cardinality_eq_add_right_extension
+                      pending.range merged.range (by simp [merged, mergeForward])
+                      (by simpa [merged, mergeForward, max_eq_right hextend.le]))
+                simp [afterExtension, afterRemoval, hstored, hextend,
+                  hmergedCard, runsCardinality_cons] at hcache ⊢
+                omega
+              · have hmergedCard : merged.cardinality = pending.cardinality := by
+                  simp [merged, mergeForward, Run.cardinality,
+                    max_eq_left (not_lt.mp hextend)]
+                simp [afterExtension, afterRemoval, hstored, hextend,
+                  hmergedCard, runsCardinality_cons] at hcache ⊢
+                omega
+            · intro hstored run hrun
+              simpa [merged, mergeForward] using
+                hstoredStart hstored run (by simp [hrun])
+          · simp only [htouch, if_false]
+            cases hstored : pendingIsStored <;>
+              simp [countPendingIfFresh] <;>
+              omega
+        · simp only [hsame, ↓reduceDIte]
+          by_cases hoverlap : next.range.val.lo ≤ pending.range.val.hi
+          · simp only [hoverlap, ↓reduceDIte]
+            let afterRemoval := cachedLength - next.cardinality
+            by_cases hextends : pending.range.val.hi < next.range.val.hi
+            · simp only [hextends, ↓reduceDIte]
+              refine ⟨trivial, ?_⟩
+              intro base hcache _
+              have hremoved : next.cardinality ≤ cachedLength := by
+                simp only [runsCardinality_cons] at hcache
+                omega
+              cases hstored : pendingIsStored <;>
+                simp [hstored, countPendingIfFresh] at hcache ⊢ <;>
+                omega
+            · simp only [hextends, ↓reduceDIte]
+              have hrec := ih pending afterRemoval
+              refine ⟨hrec.1, ?_⟩
+              intro base hcache hstoredStart
+              have hremoved : next.cardinality ≤ cachedLength := by
+                simp only [runsCardinality_cons] at hcache
+                omega
+              apply hrec.2 base
+              simp only [runsCardinality_cons] at hcache ⊢
+              omega
+              intro hstored run hrun
+              exact hstoredStart hstored run (by simp [hrun])
+          · simp only [hoverlap, ↓reduceDIte]
+            cases hstored : pendingIsStored <;>
+              simp [countPendingIfFresh] <;>
+              omega
 
 /-- Erasing CMapLen bookkeeping gives exactly Algo CMap's raw run output. -/
 private theorem internalAddCMapLenRaw_corresponds
@@ -1149,7 +1253,35 @@ private theorem internalAddCMapLenRaw_corresponds
     (input : IntRange) (value : Value) (hnonempty : input.lo ≤ input.hi) :
     (internalAddCMapLenRaw runs cachedLength input value hnonempty).runs =
       internalAddCMapRuns runs input value hnonempty := by
-  sorry
+  unfold internalAddCMapLenRaw internalAddCMapRuns
+  dsimp only
+  split <;> rename_i hprev
+  · exact (scanForwardCMapLen_preserves_correspondence_and_cardinality
+      _ false _ cachedLength).1
+  · rename_i prev
+    by_cases hsame : prev.value = value
+    · simp only [hsame, ↓reduceDIte]
+      by_cases htouch : input.lo ≤ prev.range.val.hi + 1
+      · simp only [htouch, ↓reduceDIte]
+        by_cases hcovered : input.hi ≤ prev.range.val.hi
+        · simp [hcovered]
+        · simp only [hcovered, if_false]
+          rw [(scanForwardCMapLen_preserves_correspondence_and_cardinality
+            _ true _ _).1]
+      · simp only [htouch, ↓reduceDIte]
+        rw [(scanForwardCMapLen_preserves_correspondence_and_cardinality
+          _ false _ _).1]
+    · simp only [hsame, ↓reduceDIte]
+      by_cases hoverlap : input.lo ≤ prev.range.val.hi
+      · simp only [hoverlap, ↓reduceDIte]
+        by_cases hextends : input.hi < prev.range.val.hi
+        · simp [hextends]
+        · simp only [hextends, ↓reduceDIte]
+          rw [(scanForwardCMapLen_preserves_correspondence_and_cardinality
+            _ false _ _).1]
+      · simp only [hoverlap, ↓reduceDIte]
+        rw [(scanForwardCMapLen_preserves_correspondence_and_cardinality
+          _ false _ _).1]
 
 /-- Branch-local add/subtract bookkeeping computes the cardinality of the raw
 CMapLen output whenever the incoming absolute cache is valid. -/
@@ -1162,7 +1294,137 @@ private theorem internalAddCMapLenRaw_preserves_cardinality
     (internalAddCMapLenRaw runs cachedLength input value hnonempty).cachedLength =
       runsCardinality
         (internalAddCMapLenRaw runs cachedLength input value hnonempty).runs := by
-  sorry
+  unfold internalAddCMapLenRaw
+  dsimp only
+  split <;> rename_i hprev
+  · let after :=
+      (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).snd
+    have hbeforeEmpty :
+        (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).fst = [] := by
+      apply List.getLast?_eq_none_iff.mp
+      simpa using hprev
+    have hdecomp :
+        (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).fst ++
+          (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).snd = runs := by
+      simp [List.span_eq_takeWhile_dropWhile]
+    have hafterRuns : after = runs := by
+      rw [hbeforeEmpty] at hdecomp
+      simpa [after] using hdecomp
+    have hscan := scanForwardCMapLen_preserves_correspondence_and_cardinality
+      ({ range := ⟨input, hnonempty⟩, value := value } : Run Value)
+        false after cachedLength
+    have hscanCache := hscan.2 0 (by simp [hafterRuns, hlength]) (by simp)
+    simpa [after] using hscanCache
+  · rename_i prev
+    set before :=
+      (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).fst
+        with hbeforeEq
+    set after :=
+      (List.span (fun run => decide (run.range.val.lo < input.lo)) runs).snd
+        with hafterEq
+    simp only [← hbeforeEq] at hprev ⊢
+    let init := before.dropLast
+    let inserted : Run Value := { range := ⟨input, hnonempty⟩, value := value }
+    have hdecomp : before ++ after = runs := by
+      simp [before, after, List.span_eq_takeWhile_dropWhile]
+    have hprevMem : prev ∈ before :=
+      List.mem_of_mem_getLast? (by simpa using hprev)
+    have hprevStart : prev.range.val.lo < input.lo := by
+      have hmem : prev ∈ runs.takeWhile
+          (fun run => decide (run.range.val.lo < input.lo)) := by
+        simpa [before, List.span_eq_takeWhile_dropWhile] using hprevMem
+      exact of_decide_eq_true (List.mem_takeWhile_imp
+        (p := fun run : Run Value => decide (run.range.val.lo < input.lo)) hmem)
+    have hbeforeInit : init ++ [prev] = before := by
+      simpa [init] using List.dropLast_append_getLast? prev (by simpa using hprev)
+    have hlengthParts : cachedLength =
+        runsCardinality init + prev.cardinality + runsCardinality after := by
+      rw [hlength, ← hdecomp, ← hbeforeInit,
+        runsCardinality_append, runsCardinality_append]
+      simp [Nat.add_assoc]
+    have hlowerAfter : ∀ run ∈ after, input.lo ≤ run.range.val.lo := by
+      simpa [after] using strict_start_split_suffix_lower_bound
+        runs input.lo hcanonical
+    by_cases hsame : prev.value = value
+    · simp only [hsame, ↓reduceDIte]
+      by_cases htouch : input.lo ≤ prev.range.val.hi + 1
+      · simp only [htouch, ↓reduceDIte]
+        by_cases hcovered : input.hi ≤ prev.range.val.hi
+        · simpa [hcovered] using hlength
+        · simp only [hcovered, if_false]
+          let merged := mergeForward prev inserted
+          let extendedLength := cachedLength +
+            IntRange.rightExtensionCardinality prev.range.val.hi input.hi
+          have hextends : prev.range.val.hi < input.hi := not_le.mp hcovered
+          have hmergedCard : merged.cardinality = prev.cardinality +
+              IntRange.rightExtensionCardinality prev.range.val.hi input.hi := by
+            simpa [merged, inserted, mergeForward, Run.cardinality,
+              max_eq_right hextends.le] using
+              (IntRange.NR.cardinality_eq_add_right_extension
+                prev.range merged.range (by simp [merged, mergeForward])
+                (by simpa [merged, inserted, mergeForward,
+                  max_eq_right hextends.le]))
+          have hscan := scanForwardCMapLen_preserves_correspondence_and_cardinality
+            merged true after extendedLength
+          have hscanCache := hscan.2 (runsCardinality init) (by
+            simp [extendedLength, hmergedCard, hlengthParts]
+            omega) (by
+              intro _ run hrun
+              simpa [merged, mergeForward] using
+                hprevStart.trans_le (hlowerAfter run hrun))
+          simpa [merged, extendedLength, init, runsCardinality_append]
+            using hscanCache
+      · simp only [htouch, ↓reduceDIte]
+        have hscan := scanForwardCMapLen_preserves_correspondence_and_cardinality
+          inserted false after cachedLength
+        have hscanCache := hscan.2 (runsCardinality before) (by
+          rw [hlength, ← hdecomp, runsCardinality_append]
+          simp) (by simp)
+        simpa [runsCardinality_append] using hscanCache
+    · simp only [hsame, ↓reduceDIte]
+      by_cases hoverlap : input.lo ≤ prev.range.val.hi
+      · simp only [hoverlap, ↓reduceDIte]
+        let left := leftResidualBefore input.lo prev hprevStart
+        let removed := IntRange.cardinality
+          { lo := input.lo, hi := prev.range.val.hi }
+        let afterTrim := cachedLength - removed
+        have hleftSplit : prev.cardinality = left.cardinality + removed := by
+          simpa [left, removed] using leftResidualBefore_cardinality
+            input.lo prev hprevStart hoverlap
+        have hremoved : removed ≤ cachedLength := by
+          omega
+        by_cases hextends : input.hi < prev.range.val.hi
+        · simp only [hextends, ↓reduceDIte]
+          let residual := rightResidualAfter input.hi prev hextends
+          have hthree : prev.cardinality = left.cardinality +
+              inserted.cardinality + residual.cardinality := by
+            simpa [left, inserted, residual, Run.cardinality] using
+              twoSidedPredecessorSplit_cardinality input prev hprevStart
+                hnonempty hextends
+          change afterTrim + inserted.cardinality + residual.cardinality =
+            runsCardinality (init ++ left :: inserted :: residual :: after)
+          simp only [runsCardinality_append, runsCardinality_cons]
+          omega
+        · simp only [hextends, ↓reduceDIte]
+          have htrimCache : afterTrim =
+              (runsCardinality init + left.cardinality) +
+                runsCardinality after := by
+            simp only [afterTrim]
+            omega
+          have hscan := scanForwardCMapLen_preserves_correspondence_and_cardinality
+            inserted false after afterTrim
+          have hscanCache := hscan.2
+            (runsCardinality init + left.cardinality) (by
+              simpa using htrimCache) (by simp)
+          simpa [init, left, inserted, removed, afterTrim,
+            runsCardinality_append, Nat.add_assoc] using hscanCache
+      · simp only [hoverlap, ↓reduceDIte]
+        have hscan := scanForwardCMapLen_preserves_correspondence_and_cardinality
+          inserted false after cachedLength
+        have hscanCache := hscan.2 (runsCardinality before) (by
+          rw [hlength, ← hdecomp, runsCardinality_append]
+          simp) (by simp)
+        simpa [runsCardinality_append] using hscanCache
 
 /-- Algo CMap insertion with production-shaped explicit cached key count. -/
 def internalAddCMapLen {Value : Type*} [DecidableEq Value]
