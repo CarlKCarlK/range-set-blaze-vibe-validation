@@ -9,4 +9,4 @@ import RangeSetBlaze.AlgoD
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
 export RangeSetBlaze (toSet internalAddA internalAddB internalAddC internalAddD)
-export RangeMapBlaze (algoAMap)
+export RangeMapBlaze (internalAddAMap)

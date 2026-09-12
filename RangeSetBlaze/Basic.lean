@@ -400,9 +400,13 @@ structure Run (Value : Type*) where
 
 namespace Run
 
+/-- Value-independent run order: the ranges are sorted and do not overlap. -/
+def disjointBefore {Value : Type*} (a b : Run Value) : Prop :=
+  a.range.val.hi < b.range.val.lo
+
 /-- Canonical runs do not overlap; equal-valued touching runs are disallowed. -/
 def before {Value : Type*} (a b : Run Value) : Prop :=
-  a.range.val.hi < b.range.val.lo ∧
+  disjointBefore a b ∧
     (a.value = b.value → a.range ≺ b.range)
 
 /-- Canonically shaped runs have strictly ordered, nonoverlapping endpoints. -/
@@ -446,17 +450,6 @@ lemma before_trans {Value : Type*} {a b c : Run Value}
   intro hvalue
   simpa only [IntRange.NR.before] using hgap
 
-/-- For `Unit`-valued runs, canonical run ordering is exactly the gap-separated
-ordering used by `RangeSetBlaze`. -/
-lemma before_iff_range_before_of_unit {a b : Run Unit} :
-    before a b ↔ a.range ≺ b.range := by
-  constructor
-  · intro h
-    exact h.2 (Subsingleton.elim _ _)
-  · intro h
-    refine ⟨?_, fun _ => h⟩
-    exact lt_trans (lt_add_one _) h
-
 end Run
 
 /-- A run list has canonical shape when every earlier run canonically precedes every
@@ -488,6 +481,20 @@ def runsToFunction {Value : Type*} : List (Run Value) → Int → Option Value
       else
         runsToFunction rest key :=
   by simp [runsToFunction, IntRange.mem_toSet_iff]
+
+/-- First-match interpretation of an append consults the suffix exactly when
+the prefix has no value for the key. -/
+lemma runsToFunction_append {Value : Type*}
+    (xs ys : List (Run Value)) (key : Int) :
+    runsToFunction (xs ++ ys) key =
+      match runsToFunction xs key with
+      | some value => some value
+      | none => runsToFunction ys key := by
+  induction xs with
+  | nil => simp
+  | cons run rest ih =>
+      simp only [List.cons_append, runsToFunction_cons, ih]
+      split <;> simp
 
 /-- Pointwise overwrite by an inclusive integer input range. -/
 def overwrite {Value : Type*}
@@ -561,12 +568,12 @@ example :
 example : Canonical
     ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
       ⟨⟨⟨4, 6⟩, by decide⟩, 20⟩] : List (Run Nat)) := by
-  simp [Canonical, Run.before, IntRange.NR.before]
+  simp [Canonical, Run.before, Run.disjointBefore, IntRange.NR.before]
 
 example : ¬ Canonical
     ([⟨⟨⟨1, 3⟩, by decide⟩, 10⟩,
       ⟨⟨⟨4, 6⟩, by decide⟩, 10⟩] : List (Run Nat)) := by
-  simp [Canonical, Run.before, IntRange.NR.before]
+  simp [Canonical, Run.before, Run.disjointBefore, IntRange.NR.before]
 
 example :
     overwrite (fun _ : Int => some 10) ⟨2, 4⟩ 20 3 = some 20 := by
