@@ -1317,9 +1317,8 @@ theorem internalAddDMap_toFunction {Value : Type*} [DecidableEq Value]
 
 /-! ## Algo DMap with cached length -/
 
-/- DMapLen keeps represented-key cardinalities as `Nat` at the public boundary,
-but uses `Int` for internal add/subtract bookkeeping so successor removal is
-ordinary subtraction rather than truncated `Nat.sub`. -/
+/- DMapLen keeps represented-key cardinalities as `Nat` throughout.  The
+cache invariant supplies the non-underflow facts needed by each subtraction. -/
 
 /-- The public result of cursor-shaped map insertion with explicit cached key
 cardinality. -/
@@ -1330,7 +1329,7 @@ structure DMapLenResult (Value : Type*) where
 /-- Proof-free run-list output used by the cached cursor model. -/
 private structure DMapLenRawResult (Value : Type*) where
   runs : List (Run Value)
-  cachedLength : Int
+  cachedLength : Nat
 
 /-- The cursor scan state plus the absolute cache after all removed successors
 have been subtracted. The pending and optional residual are counted later only
@@ -1340,14 +1339,14 @@ private structure DMapLenScanResult (Value : Type*) where
   rightResidual : Option (Run Value)
   remaining : List (Run Value)
   unchanged : Bool
-  cachedLength : Int
+  cachedLength : Nat
 
 /-- Count the pending run exactly when it is not already stored to the left of
 the cursor. -/
 private def countPendingIfFresh {Value : Type*}
-    (pendingIsStored : Bool) (cachedLength : Int) (pending : Run Value) : Int :=
+    (pendingIsStored : Bool) (cachedLength : Nat) (pending : Run Value) : Nat :=
   if pendingIsStored then cachedLength
-  else cachedLength + Int.ofNat pending.cardinality
+  else cachedLength + pending.cardinality
 
 /-- Cursor-local forward scan with the production add/subtract ordering.
 
@@ -1355,7 +1354,7 @@ Every consumed successor is subtracted in full. A stored pending run receives
 only a right-extension addition; a fresh pending run and a returned right
 residual remain uncounted until final cursor insertion. -/
 private def scanForwardDMapLen {Value : Type*} [DecidableEq Value]
-    (pending : Run Value) (pendingIsStored : Bool) (cachedLength : Int) :
+    (pending : Run Value) (pendingIsStored : Bool) (cachedLength : Nat) :
     List (Run Value) → DMapLenScanResult Value
   | [] =>
       { pending, rightResidual := none, remaining := [], unchanged := false,
@@ -1372,20 +1371,20 @@ private def scanForwardDMapLen {Value : Type*} [DecidableEq Value]
               unchanged := false, cachedLength }
         | some .mergeSame =>
             let merged := mergeForward pending next
-            let afterRemoval := cachedLength - Int.ofNat next.cardinality
+            let afterRemoval := cachedLength - next.cardinality
             let afterExtension :=
               if pendingIsStored && pending.range.val.hi < next.range.val.hi then
-                afterRemoval + Int.ofNat (IntRange.rightExtensionCardinality
-                  pending.range.val.hi next.range.val.hi)
+                afterRemoval + IntRange.rightExtensionCardinality
+                  pending.range.val.hi next.range.val.hi
               else afterRemoval
             scanForwardDMapLen merged pendingIsStored afterExtension rest
         | some .deleteOverwritten =>
             scanForwardDMapLen pending pendingIsStored
-              (cachedLength - Int.ofNat next.cardinality) rest
+              (cachedLength - next.cardinality) rest
         | some (.keepRightResidual residual) =>
             { pending, rightResidual := some residual, remaining := rest,
               unchanged := false,
-              cachedLength := cachedLength - Int.ofNat next.cardinality }
+              cachedLength := cachedLength - next.cardinality }
 termination_by suffix => suffix.length
 
 /-- Perform the cursor insertions that follow a completed forward scan. -/
@@ -1398,7 +1397,7 @@ private def finishDMapLenScan {Value : Type*}
     let afterPending := countPendingIfFresh
       pendingIsStored scan.cachedLength scan.pending
     let afterResidual := scan.rightResidual.elim afterPending
-      (fun residual => afterPending + Int.ofNat residual.cardinality)
+      (fun residual => afterPending + residual.cardinality)
     ⟨scanOutput {
         pending := scan.pending
         rightResidual := scan.rightResidual
@@ -1409,7 +1408,7 @@ private def finishDMapLenScan {Value : Type*}
 /-- Proof-free DMapLen control flow. This is `internalAddDMapRuns` plus the
 absolute cache mutations of the production Rust cursor path. -/
 private def internalAddDMapLenRaw {Value : Type*} [DecidableEq Value]
-    (runs : List (Run Value)) (cachedLength : Int)
+    (runs : List (Run Value)) (cachedLength : Nat)
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi) :
     DMapLenRawResult Value :=
   let gap := lowerBoundGap input.lo runs
@@ -1434,8 +1433,7 @@ private def internalAddDMapLenRaw {Value : Type*} [DecidableEq Value]
           else
             let grown := mergeForward predecessor fresh
             let afterExtension := cachedLength +
-              Int.ofNat (IntRange.rightExtensionCardinality
-                predecessor.range.val.hi input.hi)
+              IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi
             let scan := scanForwardDMapLen grown true afterExtension gap.right
             if scan.unchanged then ⟨runs, cachedLength⟩
             else
@@ -1443,13 +1441,12 @@ private def internalAddDMapLenRaw {Value : Type*} [DecidableEq Value]
               ⟨gap.left.dropLast ++ finished.runs, finished.cachedLength⟩
       | .trimDifferent left rightResidual =>
           let afterTrim := cachedLength -
-            Int.ofNat (IntRange.cardinality
-              { lo := input.lo, hi := predecessor.range.val.hi })
+            IntRange.cardinality { lo := input.lo, hi := predecessor.range.val.hi }
           match rightResidual with
           | some residual =>
               ⟨gap.left.dropLast ++ left :: fresh :: residual :: gap.right,
-                afterTrim + Int.ofNat fresh.cardinality +
-                  Int.ofNat residual.cardinality⟩
+                afterTrim + fresh.cardinality +
+                  residual.cardinality⟩
           | none =>
               let scan := scanForwardDMapLen fresh false afterTrim gap.right
               if scan.unchanged then
@@ -1511,7 +1508,7 @@ suffix run is not needed here, because the fast path is already guarded by
 private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
     {Value : Type*} [DecidableEq Value]
     (pending : Run Value) (pendingIsStored : Bool)
-    (suffix : List (Run Value)) (cachedLength : Int) :
+    (suffix : List (Run Value)) (cachedLength : Nat) :
     let scan := scanForwardDMapLen
       pending pendingIsStored cachedLength suffix
     let algo := scanForward pending pendingIsStored suffix
@@ -1519,10 +1516,10 @@ private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
     scan.unchanged = algo.unchanged ∧
       finished.runs = scanOutput algo ∧
       ∀ base, cachedLength = base +
-          (if pendingIsStored then Int.ofNat pending.cardinality else 0) +
-            Int.ofNat (runsCardinality suffix) →
+          (if pendingIsStored then pending.cardinality else 0) +
+            runsCardinality suffix →
         finished.cachedLength = base +
-          Int.ofNat (runsCardinality finished.runs) := by
+          runsCardinality finished.runs := by
   induction suffix generalizing pending cachedLength with
   | nil =>
       cases pendingIsStored <;>
@@ -1546,15 +1543,18 @@ private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
             | mergeSame =>
                 simp only
                 let merged := mergeForward pending next
-                let afterRemoval := cachedLength - Int.ofNat next.cardinality
+                let afterRemoval := cachedLength - next.cardinality
                 let afterExtension :=
                   if pendingIsStored && pending.range.val.hi < next.range.val.hi then
-                    afterRemoval + Int.ofNat (IntRange.rightExtensionCardinality
-                      pending.range.val.hi next.range.val.hi)
+                    afterRemoval + IntRange.rightExtensionCardinality
+                      pending.range.val.hi next.range.val.hi
                   else afterRemoval
                 have hrec := ih merged afterExtension
                 refine ⟨hrec.1, hrec.2.1, ?_⟩
                 intro base hcache
+                have hremoved : next.cardinality ≤ cachedLength := by
+                  simp only [runsCardinality_cons] at hcache
+                  omega
                 apply hrec.2.2 base
                 cases hstored : pendingIsStored
                 · simp [afterExtension, afterRemoval, hstored,
@@ -1583,23 +1583,38 @@ private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
             | deleteOverwritten =>
                 simp only
                 have hrec := ih pending
-                  (cachedLength - Int.ofNat next.cardinality)
+                  (cachedLength - next.cardinality)
                 refine ⟨hrec.1, hrec.2.1, ?_⟩
                 intro base hcache
+                have hremoved : next.cardinality ≤ cachedLength := by
+                  simp only [runsCardinality_cons] at hcache
+                  omega
                 apply hrec.2.2 base
                 simp only [runsCardinality_cons] at hcache ⊢
-                simp only [Int.ofNat_eq_natCast, Nat.cast_add] at hcache ⊢
                 omega
             | keepRightResidual residual =>
+                simp only
+                refine ⟨True.intro, rfl, ?_⟩
+                intro base hcache
+                have hremoved : next.cardinality ≤ cachedLength := by
+                  simp only [runsCardinality_cons] at hcache
+                  omega
+                simp only [runsCardinality_cons] at hcache
+                have hafterRemoval : cachedLength - next.cardinality =
+                      (base + if pendingIsStored then pending.cardinality else 0) +
+                        runsCardinality rest := by
+                  apply (Nat.sub_eq_iff_eq_add hremoved).mpr
+                  simpa [Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using hcache
                 cases hstored : pendingIsStored <;>
                   simp [finishDMapLenScan, countPendingIfFresh,
-                    scanOutput, runsCardinality_cons] <;>
+                    scanOutput, runsCardinality_cons, hafterRemoval,
+                    hstored] <;>
                   omega
 
 /-- Erasing DMapLen bookkeeping gives exactly Algo DMap's raw run output. -/
 private theorem internalAddDMapLenRaw_corresponds
     {Value : Type*} [DecidableEq Value]
-    (runs : List (Run Value)) (cachedLength : Int)
+    (runs : List (Run Value)) (cachedLength : Nat)
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi) :
     (internalAddDMapLenRaw runs cachedLength input value hinput).runs =
       internalAddDMapRuns runs input value hinput := by
@@ -1631,8 +1646,8 @@ private theorem internalAddDMapLenRaw_corresponds
             (mergeForward predecessor
               ({ range := ⟨input, hinput⟩, value := value } : Run Value))
               true (lowerBoundGap input.lo runs).right
-                (cachedLength + Int.ofNat
-                (IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi))
+                (cachedLength +
+                IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi)
           rw [hscan.1, hscan.2.1]
           split <;> rfl
     | trimDifferent left rightResidual =>
@@ -1644,8 +1659,8 @@ private theorem internalAddDMapLenRaw_corresponds
             have hscan := scanForwardDMapLen_preserves_correspondence_and_cardinality
               ({ range := ⟨input, hinput⟩, value := value } : Run Value)
                 false (lowerBoundGap input.lo runs).right
-                  (cachedLength - Int.ofNat (IntRange.cardinality
-                  { lo := input.lo, hi := predecessor.range.val.hi }))
+                  (cachedLength - IntRange.cardinality
+                  { lo := input.lo, hi := predecessor.range.val.hi })
             rw [hscan.1, hscan.2.1]
             split <;> rfl
 
@@ -1653,13 +1668,13 @@ private theorem internalAddDMapLenRaw_corresponds
 the incoming absolute cache is valid. -/
 private theorem internalAddDMapLenRaw_preserves_cardinality
     {Value : Type*} [DecidableEq Value]
-    (runs : List (Run Value)) (cachedLength : Int)
+    (runs : List (Run Value)) (cachedLength : Nat)
     (input : IntRange) (value : Value) (hinput : input.lo ≤ input.hi)
     (hcanonical : Canonical runs)
-    (hlength : cachedLength = Int.ofNat (runsCardinality runs)) :
+    (hlength : cachedLength = runsCardinality runs) :
     (internalAddDMapLenRaw runs cachedLength input value hinput).cachedLength =
-      Int.ofNat (runsCardinality
-        (internalAddDMapLenRaw runs cachedLength input value hinput).runs) := by
+      runsCardinality
+        (internalAddDMapLenRaw runs cachedLength input value hinput).runs := by
   unfold internalAddDMapLenRaw
   dsimp only
   let gap := lowerBoundGap input.lo runs
@@ -1696,11 +1711,11 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
         simpa [init] using List.dropLast_append_getLast? predecessor
           (by simpa [CursorGap.peekPrev] using hprev)
       have hlengthParts : cachedLength =
-          Int.ofNat (runsCardinality init) + Int.ofNat predecessor.cardinality +
-            Int.ofNat (runsCardinality gap.right) := by
+          runsCardinality init + predecessor.cardinality +
+            runsCardinality gap.right := by
         rw [hlength, hdecomp, ← hleftDecomp,
           runsCardinality_append, runsCardinality_append]
-        simp [Int.ofNat_eq_natCast, Nat.cast_add]
+        simp [Nat.add_assoc]
       generalize haction :
         classifyPredecessor input.lo input.hi value predecessor = action
       cases action with
@@ -1709,9 +1724,9 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
           have hscan := scanForwardDMapLen_preserves_correspondence_and_cardinality
             fresh false gap.right cachedLength
           have hscanCache := hscan.2.2
-            (Int.ofNat (runsCardinality gap.left)) (by
+            (runsCardinality gap.left) (by
               rw [hlength, hdecomp, runsCardinality_append]
-              simp [Int.ofNat_eq_natCast, Nat.cast_add])
+              simp)
           by_cases hunchanged :
               (scanForwardDMapLen fresh false cachedLength gap.right).unchanged = true
           · simpa [fresh, gap, hunchanged] using hlength
@@ -1723,8 +1738,8 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
           · simpa [hcovered] using hlength
           · simp only [hcovered, if_false]
             let grown := mergeForward predecessor fresh
-            let afterExtension := cachedLength + Int.ofNat
-              (IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi)
+            let afterExtension := cachedLength +
+              IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi
             have hextends : predecessor.range.val.hi < input.hi :=
               not_le.mp hcovered
             have hgrownCard : grown.cardinality = predecessor.cardinality +
@@ -1737,17 +1752,16 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
                     max_eq_right hextends.le]))
             have hscan := scanForwardDMapLen_preserves_correspondence_and_cardinality
               grown true gap.right afterExtension
-            have hscanCache := hscan.2.2 (Int.ofNat (runsCardinality init)) (by
-              simp [afterExtension, hgrownCard, hlengthParts,
-                Int.ofNat_eq_natCast, Nat.cast_add]
+            have hscanCache := hscan.2.2 (runsCardinality init) (by
+              simp [afterExtension, hgrownCard, hlengthParts]
               omega)
             by_cases hunchanged :
                 (scanForwardDMapLen grown true afterExtension gap.right).unchanged = true
             · have hunchanged' : (scanForwardDMapLen
                   (mergeForward predecessor
                     ({ range := ⟨input, hinput⟩, value := value } : Run Value)) true
-                  (cachedLength + Int.ofNat (IntRange.rightExtensionCardinality
-                    predecessor.range.val.hi input.hi))
+                  (cachedLength + IntRange.rightExtensionCardinality
+                    predecessor.range.val.hi input.hi)
                   (lowerBoundGap input.lo runs).right).unchanged = true := by
                 simpa [grown, fresh, afterExtension, gap] using hunchanged
               simp only [hunchanged', if_true]
@@ -1755,8 +1769,8 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
             · have hunchanged' : ¬ (scanForwardDMapLen
                   (mergeForward predecessor
                     ({ range := ⟨input, hinput⟩, value := value } : Run Value)) true
-                  (cachedLength + Int.ofNat (IntRange.rightExtensionCardinality
-                    predecessor.range.val.hi input.hi))
+                  (cachedLength + IntRange.rightExtensionCardinality
+                    predecessor.range.val.hi input.hi)
                   (lowerBoundGap input.lo runs).right).unchanged = true := by
                 simpa [grown, fresh, afterExtension, gap] using hunchanged
               simp only [hunchanged']
@@ -1766,7 +1780,6 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
           simp only [haction]
           let removed := IntRange.cardinality
             { lo := input.lo, hi := predecessor.range.val.hi }
-          let afterTrim := cachedLength - Int.ofNat removed
           have htrim : predecessor.cardinality = left.cardinality + removed := by
             unfold classifyPredecessor at haction
             dsimp only at haction
@@ -1782,6 +1795,9 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
               subst left
               simpa [removed] using leftResidualBefore_cardinality
                 input.lo predecessor hpredecessorStart hoverlap
+          have hremoved : removed ≤ cachedLength := by
+            omega
+          let afterTrim := cachedLength - removed
           cases rightResidual with
           | some residual =>
               simp only
@@ -1800,56 +1816,47 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
                     twoSidedPredecessorSplit_cardinality input predecessor
                       hpredecessorStart hinput hextends
                 · simp [hextends] at haction
-              change afterTrim + Int.ofNat fresh.cardinality +
-                  Int.ofNat residual.cardinality =
-                Int.ofNat (runsCardinality
-                  (init ++ left :: fresh :: residual :: gap.right))
+              change afterTrim + fresh.cardinality + residual.cardinality =
+                runsCardinality (init ++ left :: fresh :: residual :: gap.right)
               simp only [runsCardinality_append, runsCardinality_cons]
-              simp only [afterTrim, Int.ofNat_eq_natCast, Nat.cast_add]
-                at hlengthParts hthree ⊢
+              simp only [afterTrim] at hlengthParts hthree ⊢
               omega
           | none =>
               simp only
               have htrimCache : afterTrim =
-                  (Int.ofNat (runsCardinality init) + Int.ofNat left.cardinality) +
-                    Int.ofNat (runsCardinality gap.right) := by
-                simp only [afterTrim]
-                simp only [Int.ofNat_eq_natCast] at hlengthParts ⊢
+                  (runsCardinality init + left.cardinality) +
+                    runsCardinality gap.right := by
+                apply (Nat.sub_eq_iff_eq_add hremoved).mpr
                 omega
               have hscan := scanForwardDMapLen_preserves_correspondence_and_cardinality
                 fresh false gap.right afterTrim
               have hscanCache := hscan.2.2
-                (Int.ofNat (runsCardinality init) + Int.ofNat left.cardinality)
+                (runsCardinality init + left.cardinality)
                 (by simpa using htrimCache)
               by_cases hunchanged :
                   (scanForwardDMapLen fresh false afterTrim gap.right).unchanged = true
               · have hunchanged' : (scanForwardDMapLen
                     ({ range := ⟨input, hinput⟩, value := value } : Run Value) false
-                    (cachedLength - Int.ofNat (IntRange.cardinality
-                      { lo := input.lo, hi := predecessor.range.val.hi }))
+                    (cachedLength - IntRange.cardinality
+                      { lo := input.lo, hi := predecessor.range.val.hi })
                     (lowerBoundGap input.lo runs).right).unchanged = true := by
                   simpa [fresh, afterTrim, removed, gap] using hunchanged
                 simp only [hunchanged', if_true]
-                change afterTrim = Int.ofNat
-                    (runsCardinality (init ++ left :: gap.right))
+                change afterTrim = runsCardinality (init ++ left :: gap.right)
                 simp only [runsCardinality_append, runsCardinality_cons]
-                simpa [Int.ofNat_eq_natCast, Nat.cast_add,
-                  Int.add_assoc] using htrimCache
+                simpa [Nat.add_assoc] using htrimCache
               · have hunchanged' : ¬ (scanForwardDMapLen
                     ({ range := ⟨input, hinput⟩, value := value } : Run Value) false
-                    (cachedLength - Int.ofNat (IntRange.cardinality
-                      { lo := input.lo, hi := predecessor.range.val.hi }))
+                    (cachedLength - IntRange.cardinality
+                      { lo := input.lo, hi := predecessor.range.val.hi })
                     (lowerBoundGap input.lo runs).right).unchanged = true := by
                   simpa [fresh, afterTrim, removed, gap] using hunchanged
                 simp only [hunchanged']
                 change (finishDMapLenScan false
                     (scanForwardDMapLen fresh false afterTrim gap.right)).cachedLength =
-                  Int.ofNat (runsCardinality
-                    (init ++ left :: (finishDMapLenScan false
-                      (scanForwardDMapLen fresh false afterTrim gap.right)).runs))
-                simpa [runsCardinality_append, Nat.add_assoc,
-                  Int.ofNat_eq_natCast, Nat.cast_add,
-                  Int.add_assoc] using hscanCache
+                  runsCardinality (init ++ left :: (finishDMapLenScan false
+                    (scanForwardDMapLen fresh false afterTrim gap.right)).runs)
+                simpa [runsCardinality_append, Nat.add_assoc] using hscanCache
 
 /-- Cursor-shaped map insertion with production explicit cached key count. -/
 def internalAddDMapLen {Value : Type*} [DecidableEq Value]
@@ -1859,7 +1866,7 @@ def internalAddDMapLen {Value : Type*} [DecidableEq Value]
     exact ⟨map, cachedLength⟩
   else
     have hinput : input.lo ≤ input.hi := by omega
-    let raw := internalAddDMapLenRaw map.runs (Int.ofNat cachedLength)
+    let raw := internalAddDMapLenRaw map.runs cachedLength
       input value hinput
     have hruns : raw.runs = internalAddDMapRuns map.runs input value hinput :=
       internalAddDMapLenRaw_corresponds
@@ -1868,7 +1875,7 @@ def internalAddDMapLen {Value : Type*} [DecidableEq Value]
       rw [hruns]
       exact (internalAddDMapRuns_preserves_canonical_and_overwrite
         map.runs input value hinput map.canonical).1
-    exact ⟨⟨raw.runs, hcanonical⟩, raw.cachedLength.toNat⟩
+    exact ⟨⟨raw.runs, hcanonical⟩, raw.cachedLength⟩
 
 /-- DMapLen's map component is exactly Algo DMap's result representation. -/
 theorem internalAddDMapLen_mapResult {Value : Type*} [DecidableEq Value]
@@ -1896,11 +1903,10 @@ theorem internalAddDMapLen_cachedLength {Value : Type*} [DecidableEq Value]
   · simpa [hempty, RangeMapBlaze.cardinality] using hlength
   · simp only [dif_neg hempty]
     have hraw := internalAddDMapLenRaw_preserves_cardinality map.runs
-      (Int.ofNat cachedLength)
+      cachedLength
       input value (by omega) map.canonical
       (by simpa [RangeMapBlaze.cardinality] using hlength)
-    have hnat := congrArg Int.toNat hraw
-    simpa [RangeMapBlaze.cardinality] using hnat
+    simpa [RangeMapBlaze.cardinality] using hraw
 
 /-- DMapLen inherits Algo DMap's exact pointwise overwrite semantics. -/
 theorem internalAddDMapLen_toFunction {Value : Type*} [DecidableEq Value]

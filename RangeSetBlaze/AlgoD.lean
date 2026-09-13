@@ -448,77 +448,76 @@ theorem internalAddD_toSet (s : RangeSetBlaze) (r : IntRange) :
 /-! ## Algo D with cached length
 
 DLen is the cursor algorithm above with the production `len` updates made
-explicit.  The cache is a mathematical `Int`; cardinalities remain `Nat`.
+explicit.  The cache is a mathematical `Nat`; it is not a model of Rust's
+machine-width `SafeLen`.
 -/
 
 /-- The externally useful result of cached-length Algo D insertion. -/
 structure DLenResult where
   setResult : RangeSetBlaze
-  cachedLength : Int
+  cachedLength : Nat
   deriving Repr
 
 /-- Proof-free output used while the cursor-shaped result is being assembled. -/
 private structure DLenRawResult where
   ranges : List NR
-  cachedLength : Int
+  cachedLength : Nat
 
 /-- Cursor successor absorption with Rust's subtract-on-removal bookkeeping. -/
 private structure DLenScanResult where
   current : NR
   pending : List NR
-  cachedLength : Int
+  cachedLength : Nat
 
 private def mkDLenNR (lo hi : Int) (h : lo ≤ hi) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
 private def absorbSuccessorsDLen
-    (current : NR) (right : List NR) (cachedLength : Int) : DLenScanResult :=
+    (current : NR) (right : List NR) (cachedLength : Nat) : DLenScanResult :=
   match right with
   | [] => ⟨current, [], cachedLength⟩
   | next :: tail =>
       if _hmerge : NR.mergeable current next then
         absorbSuccessorsDLen (NR.glue current next) tail
-          (cachedLength - Int.ofNat next.val.cardinality)
+          (cachedLength - next.val.cardinality)
       else
         ⟨current, next :: tail, cachedLength⟩
 
 private def finishDLenScan
-    (current : NR) (right : List NR) (cachedLength : Int)
+    (current : NR) (right : List NR) (cachedLength : Nat)
     (pendingWasStored : Bool) (originalEnd : Int) : DLenScanResult :=
   let scanned := absorbSuccessorsDLen current right cachedLength
   if pendingWasStored && originalEnd < scanned.current.val.hi then
     { scanned with
       cachedLength := scanned.cachedLength +
-        Int.ofNat (IntRange.cardinality
-          { lo := originalEnd, hi := scanned.current.val.hi - 1 }) }
+        IntRange.cardinality { lo := originalEnd, hi := scanned.current.val.hi - 1 } }
   else
     scanned
 
 /-- The fresh cursor path: remove swallowed successors, insert the accumulated
 range, then add that newly represented range to the cache. -/
 private def freshInsertDLen
-    (gap : CursorGap) (input : NR) (cachedLength : Int) : DLenRawResult :=
+    (gap : CursorGap) (input : NR) (cachedLength : Nat) : DLenRawResult :=
   let scanned := finishDLenScan input gap.right cachedLength false input.val.hi
   ⟨gap.insertBefore scanned.current scanned.pending,
-    scanned.cachedLength + Int.ofNat scanned.current.val.cardinality⟩
+    scanned.cachedLength + scanned.current.val.cardinality⟩
 
 /-- The predecessor path: add the predecessor's newly covered tail, remove
 swallowed successors, and add any final extension beyond the inserted end. -/
 private def extendPredecessorDLen
-    (gap : CursorGap) (predecessor input : NR) (cachedLength : Int) : DLenRawResult :=
+    (gap : CursorGap) (predecessor input : NR) (cachedLength : Nat) : DLenRawResult :=
   let extendedHi := max predecessor.val.hi input.val.hi
   let extended := mkDLenNR predecessor.val.lo extendedHi
     (predecessor.property.trans (le_max_left _ _))
   let afterExtension := cachedLength +
-    Int.ofNat (IntRange.cardinality
-      { lo := predecessor.val.hi, hi := input.val.hi - 1 })
+    IntRange.cardinality { lo := predecessor.val.hi, hi := input.val.hi - 1 }
   let scanned := finishDLenScan extended gap.right afterExtension true input.val.hi
   ⟨gap.left.dropLast ++ scanned.current :: scanned.pending, scanned.cachedLength⟩
 
 /-- DLen's executable control flow is Algo D's control flow with only cache
 updates threaded through the fresh and predecessor scan paths. -/
 private def internalAddDLenRaw
-    (ranges : List NR) (cachedLength : Int) (r : IntRange) : DLenRawResult :=
+    (ranges : List NR) (cachedLength : Nat) (r : IntRange) : DLenRawResult :=
   if hempty : r.hi < r.lo then
     ⟨ranges, cachedLength⟩
   else
@@ -549,7 +548,7 @@ private def internalAddDLenRaw
         | none => freshInsertDLen gap input cachedLength
 
 private lemma absorbSuccessorsDLen_corresponds
-    (current : NR) (right : List NR) (cachedLength : Int) :
+    (current : NR) (right : List NR) (cachedLength : Nat) :
     (absorbSuccessorsDLen current right cachedLength).current =
         (absorbSuccessors current right).fst ∧
       (absorbSuccessorsDLen current right cachedLength).pending =
@@ -563,7 +562,7 @@ private lemma absorbSuccessorsDLen_corresponds
       · simp [absorbSuccessorsDLen, absorbSuccessors, hmerge]
 
 private lemma finishDLenScan_corresponds
-    (current : NR) (right : List NR) (cachedLength : Int)
+    (current : NR) (right : List NR) (cachedLength : Nat)
     (pendingWasStored : Bool) (originalEnd : Int) :
     (finishDLenScan current right cachedLength pendingWasStored originalEnd).current =
         (absorbSuccessors current right).fst ∧
@@ -576,7 +575,7 @@ private lemma finishDLenScan_corresponds
 
 /-- Erasing DLen bookkeeping gives exactly Algo D's list output. -/
 private theorem internalAddDLenRaw_corresponds
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
     (internalAddDLenRaw s.ranges cachedLength r).ranges =
       (internalAddD s r).ranges := by
   classical
@@ -638,12 +637,13 @@ private theorem internalAddDLenRaw_corresponds
             simp [freshInsertDLen, finishDLenScan_corresponds]
 
 /-- Removing absorbed successors subtracts exactly their old cardinalities,
-leaving the untouched suffix contribution in the integer cache. -/
+leaving the untouched suffix contribution in the cache.  In the merge case,
+the additive cached-base invariant supplies the local non-underflow fact. -/
 private lemma absorbSuccessorsDLen_preserves_cached_base
-    (current : NR) (right : List NR) (cachedLength base : Int)
-    (hlength : cachedLength = base + Int.ofNat (rangesCardinality right)) :
+    (current : NR) (right : List NR) (cachedLength base : Nat)
+    (hlength : cachedLength = base + rangesCardinality right) :
     let scanned := absorbSuccessorsDLen current right cachedLength
-    scanned.cachedLength = base + Int.ofNat (rangesCardinality scanned.pending) := by
+    scanned.cachedLength = base + rangesCardinality scanned.pending := by
   induction right generalizing current cachedLength with
   | nil => simpa [absorbSuccessorsDLen] using hlength
   | cons next tail ih =>
@@ -651,17 +651,15 @@ private lemma absorbSuccessorsDLen_preserves_cached_base
       · simp only [absorbSuccessorsDLen, hmerge]
         apply ih
         rw [rangesCardinality_cons] at hlength
-        have hcast : Int.ofNat (next.val.cardinality + rangesCardinality tail) =
-            Int.ofNat next.val.cardinality + Int.ofNat (rangesCardinality tail) := by
-          simp [Int.ofNat_eq_natCast, Nat.cast_add]
-        rw [hcast] at hlength
-        omega
+        have hremoved : next.val.cardinality ≤ cachedLength := by
+          omega
+        exact Nat.sub_eq_iff_eq_add hremoved |>.2 (by omega)
       · simpa [absorbSuccessorsDLen, hmerge] using hlength
 
 /-- The successor scan preserves the pending lower endpoint and only grows its
 upper endpoint when all successor starts are at or to its right. -/
 private lemma absorbSuccessorsDLen_preserves_endpoints
-    (current : NR) (right : List NR) (cachedLength : Int)
+    (current : NR) (right : List NR) (cachedLength : Nat)
     (hlower : ∀ nr ∈ right, current.val.lo ≤ nr.val.lo) :
     let scanned := absorbSuccessorsDLen current right cachedLength
     scanned.current.val.lo = current.val.lo ∧
@@ -675,7 +673,7 @@ private lemma absorbSuccessorsDLen_preserves_endpoints
         have hglueLo : (NR.glue current next).val.lo = current.val.lo := by
           simp [NR.glue, IntRange.mergeRange, min_eq_left hnext]
         have hrec := ih (NR.glue current next)
-          (cachedLength - Int.ofNat next.val.cardinality) (by
+          (cachedLength - next.val.cardinality) (by
             intro nr hmem
             rw [hglueLo]
             exact hlower nr (by simp [hmem]))
@@ -685,51 +683,46 @@ private lemma absorbSuccessorsDLen_preserves_endpoints
 /-- Fresh insertion removes absorbed successors and adds the final pending
 range exactly once. -/
 private theorem freshInsertDLen_preserves_cardinality
-    (ranges : List NR) (gap : CursorGap) (input : NR) (cachedLength : Int)
+    (ranges : List NR) (gap : CursorGap) (input : NR) (cachedLength : Nat)
     (hdecomp : ranges = gap.left ++ gap.right)
-    (hlength : cachedLength = Int.ofNat (rangesCardinality ranges)) :
+    (hlength : cachedLength = rangesCardinality ranges) :
     (freshInsertDLen gap input cachedLength).cachedLength =
-      Int.ofNat (rangesCardinality
-        (freshInsertDLen gap input cachedLength).ranges) := by
+      rangesCardinality (freshInsertDLen gap input cachedLength).ranges := by
   let scanned := absorbSuccessorsDLen input gap.right cachedLength
-  have hcache : cachedLength = Int.ofNat (rangesCardinality gap.left) +
-      Int.ofNat (rangesCardinality gap.right) := by
+  have hcache : cachedLength = rangesCardinality gap.left +
+      rangesCardinality gap.right := by
     rw [hlength, hdecomp, rangesCardinality_append]
-    simp [Int.ofNat_eq_natCast, Nat.cast_add]
   have hscan := absorbSuccessorsDLen_preserves_cached_base input gap.right
-    cachedLength (Int.ofNat (rangesCardinality gap.left)) hcache
+    cachedLength (rangesCardinality gap.left) hcache
   simp [freshInsertDLen, finishDLenScan, CursorGap.insertBefore,
     rangesCardinality_append]
   have hscan' : scanned.cachedLength =
-      Int.ofNat (rangesCardinality gap.left) +
-        Int.ofNat (rangesCardinality scanned.pending) := by
+      rangesCardinality gap.left + rangesCardinality scanned.pending := by
     simpa [scanned] using hscan
   dsimp only [scanned] at hscan'
   rw [hscan']
-  simp only [Int.ofNat_eq_natCast]
   omega
 
 /-- Extending a stored predecessor, removing absorbed successors, and adding
-the final exposed right tail preserves the exact integer cardinality cache. -/
+the final exposed right tail preserves the exact cardinality cache. -/
 private theorem extendPredecessorDLen_preserves_cardinality
     (ranges : List NR) (gap : CursorGap) (predecessor input : NR)
-    (cachedLength : Int)
+    (cachedLength : Nat)
     (hdecomp : ranges = gap.left ++ gap.right)
     (hlast : gap.left.getLast? = some predecessor)
     (hpredLo : predecessor.val.lo < input.val.lo)
     (hright : ∀ nr ∈ gap.right, input.val.lo ≤ nr.val.lo)
     (hextend : predecessor.val.hi < input.val.hi)
-    (hlength : cachedLength = Int.ofNat (rangesCardinality ranges)) :
+    (hlength : cachedLength = rangesCardinality ranges) :
     (extendPredecessorDLen gap predecessor input cachedLength).cachedLength =
-      Int.ofNat (rangesCardinality
-        (extendPredecessorDLen gap predecessor input cachedLength).ranges) := by
+      rangesCardinality (extendPredecessorDLen gap predecessor input cachedLength).ranges := by
   let init := gap.left.dropLast
   let extendedHi := max predecessor.val.hi input.val.hi
   let extended := mkDLenNR predecessor.val.lo extendedHi
     (predecessor.property.trans (le_max_left _ _))
   let added := IntRange.cardinality
     { lo := predecessor.val.hi, hi := input.val.hi - 1 }
-  let afterExtension := cachedLength + Int.ofNat added
+  let afterExtension := cachedLength + added
   let scanned := absorbSuccessorsDLen extended gap.right afterExtension
   have hne : gap.left ≠ [] := by
     intro hempty
@@ -742,8 +735,8 @@ private theorem extendPredecessorDLen_preserves_cardinality
     change max predecessor.val.hi input.val.hi = input.val.hi
     exact max_eq_right hextend.le
   have hcache : afterExtension =
-      Int.ofNat (rangesCardinality init) + Int.ofNat extended.val.cardinality +
-        Int.ofNat (rangesCardinality gap.right) := by
+      (rangesCardinality init + extended.val.cardinality) +
+        rangesCardinality gap.right := by
     have hcardExtended : extended.val.cardinality =
         predecessor.val.cardinality + added := by
       have hcard := NR.cardinality_eq_add_right_extension predecessor extended
@@ -751,16 +744,15 @@ private theorem extendPredecessorDLen_preserves_cardinality
         (by simp [extended, extendedHi, mkDLenNR, hextend])
       rw [hextendedHi] at hcard
       simpa [added, IntRange.rightExtensionCardinality] using hcard
-    change cachedLength + Int.ofNat added = _
+    change cachedLength + added = _
     rw [hlength, hdecomp, hleft, rangesCardinality_append,
       rangesCardinality_append, rangesCardinality_cons]
     simp only [rangesCardinality_nil, Nat.add_zero]
     rw [hcardExtended]
-    simp only [Int.ofNat_eq_natCast, Nat.cast_add]
     omega
   have hscan := absorbSuccessorsDLen_preserves_cached_base extended gap.right
     afterExtension
-    (Int.ofNat (rangesCardinality init) + Int.ofNat extended.val.cardinality)
+    (rangesCardinality init + extended.val.cardinality)
     (by omega)
   have hend := absorbSuccessorsDLen_preserves_endpoints extended gap.right
     afterExtension (by
@@ -770,14 +762,14 @@ private theorem extendPredecessorDLen_preserves_cardinality
   · have hfinish :
         finishDLenScan extended gap.right afterExtension true input.val.hi =
           { scanned with cachedLength := (scanned.cachedLength +
-              Int.ofNat (IntRange.cardinality
-                { lo := input.val.hi, hi := scanned.current.val.hi - 1 })) } := by
+              IntRange.cardinality
+                { lo := input.val.hi, hi := scanned.current.val.hi - 1 }) } := by
       simp [finishDLenScan, scanned, hfinal]
     change (finishDLenScan extended gap.right afterExtension true input.val.hi).cachedLength =
-      Int.ofNat (rangesCardinality
+      rangesCardinality
         (init ++ (finishDLenScan extended gap.right afterExtension true
           input.val.hi).current ::
-          (finishDLenScan extended gap.right afterExtension true input.val.hi).pending))
+          (finishDLenScan extended gap.right afterExtension true input.val.hi).pending)
     rw [hfinish]
     simp only [rangesCardinality_append, rangesCardinality_cons]
     have hcurrentCard : scanned.current.val.cardinality =
@@ -787,8 +779,8 @@ private theorem extendPredecessorDLen_preserves_cardinality
         (NR.cardinality_eq_add_right_extension extended scanned.current
           hend.1 (by simpa [hextendedHi] using hfinal))
     have hscan' : scanned.cachedLength =
-        Int.ofNat (rangesCardinality init) + Int.ofNat extended.val.cardinality +
-          Int.ofNat (rangesCardinality scanned.pending) := by
+        (rangesCardinality init + extended.val.cardinality) +
+          rangesCardinality scanned.pending := by
       simpa [scanned] using hscan
     dsimp [scanned] at hfinal hend hcurrentCard hscan' ⊢
     rw [hscan']
@@ -798,15 +790,15 @@ private theorem extendPredecessorDLen_preserves_cardinality
         finishDLenScan extended gap.right afterExtension true input.val.hi = scanned := by
       simp [finishDLenScan, scanned, hfinal]
     change (finishDLenScan extended gap.right afterExtension true input.val.hi).cachedLength =
-      Int.ofNat (rangesCardinality
+      rangesCardinality
         (init ++ (finishDLenScan extended gap.right afterExtension true
           input.val.hi).current ::
-          (finishDLenScan extended gap.right afterExtension true input.val.hi).pending))
+          (finishDLenScan extended gap.right afterExtension true input.val.hi).pending)
     rw [hfinish]
     simp only [rangesCardinality_append, rangesCardinality_cons]
     have hscan' : scanned.cachedLength =
-        Int.ofNat (rangesCardinality init) + Int.ofNat extended.val.cardinality +
-          Int.ofNat (rangesCardinality scanned.pending) := by
+        (rangesCardinality init + extended.val.cardinality) +
+          rangesCardinality scanned.pending := by
       simpa [scanned] using hscan
     dsimp [scanned] at hfinal hend hscan' ⊢
     rw [hscan']
@@ -825,11 +817,10 @@ private theorem extendPredecessorDLen_preserves_cardinality
 /-- Branch-local cached arithmetic computes the cardinality of DLen's output
 from the canonical-list and lower-bound obligations exposed by Algo D. -/
 private theorem internalAddDLenRaw_preserves_cardinality
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange)
-    (hlength : cachedLength = Int.ofNat s.cardinality) :
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange)
+    (hlength : cachedLength = s.cardinality) :
     (internalAddDLenRaw s.ranges cachedLength r).cachedLength =
-      Int.ofNat (rangesCardinality
-        (internalAddDLenRaw s.ranges cachedLength r).ranges) := by
+      rangesCardinality (internalAddDLenRaw s.ranges cachedLength r).ranges := by
   classical
   unfold internalAddDLenRaw
   by_cases hempty : r.hi < r.lo
@@ -916,7 +907,7 @@ private theorem internalAddDLenRaw_preserves_cardinality
 
 /-- Algo D insertion with an explicit incoming cached element count. -/
 def internalAddDLen
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) : DLenResult :=
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) : DLenResult :=
   let raw := internalAddDLenRaw s.ranges cachedLength r
   let setResult : RangeSetBlaze :=
     ⟨raw.ranges, by
@@ -926,7 +917,7 @@ def internalAddDLen
 
 /-- DLen's set component is exactly Algo D's result representation. -/
 theorem internalAddDLen_setResult
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
     (internalAddDLen s cachedLength r).setResult = internalAddD s r := by
   unfold internalAddDLen
   dsimp only
@@ -935,15 +926,15 @@ theorem internalAddDLen_setResult
 
 /-- A valid incoming cached count remains valid after Algo D insertion. -/
 theorem internalAddDLen_cachedLength
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange)
-    (hlength : cachedLength = Int.ofNat s.cardinality) :
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange)
+    (hlength : cachedLength = s.cardinality) :
     (internalAddDLen s cachedLength r).cachedLength =
-      Int.ofNat (internalAddDLen s cachedLength r).setResult.cardinality := by
+      (internalAddDLen s cachedLength r).setResult.cardinality := by
   exact internalAddDLenRaw_preserves_cardinality s cachedLength r hlength
 
 /-- DLen inherits Algo D's already-proved set semantics. -/
 theorem internalAddDLen_toSet
-    (s : RangeSetBlaze) (cachedLength : Int) (r : IntRange) :
+    (s : RangeSetBlaze) (cachedLength : Nat) (r : IntRange) :
     (internalAddDLen s cachedLength r).setResult.toSet = s.toSet ∪ r.toSet := by
   rw [internalAddDLen_setResult]
   exact internalAddD_toSet s r
