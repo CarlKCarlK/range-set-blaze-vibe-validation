@@ -343,7 +343,7 @@ def rangesToSet (rs : List NR) : Set Int :=
 /-- The sum of the inclusive cardinalities of a range list. For a canonical
 list this is the cardinality of the represented finite integer set. -/
 def rangesCardinality (rs : List NR) : Nat :=
-  rs.foldr (fun r total => r.val.cardinality + total) 0
+  (rs.map (fun r => r.val.cardinality)).sum
 
 @[simp] lemma rangesCardinality_nil :
     rangesCardinality ([] : List NR) = 0 := rfl
@@ -354,9 +354,7 @@ def rangesCardinality (rs : List NR) : Nat :=
 @[simp] lemma rangesCardinality_append (xs ys : List NR) :
     rangesCardinality (xs ++ ys) =
       rangesCardinality xs + rangesCardinality ys := by
-  induction xs with
-  | nil => simp
-  | cons x xs ih => simp [ih, Nat.add_assoc]
+  simp [rangesCardinality]
 
 /-- The mathematical element count represented by a range set. -/
 def cardinality (s : RangeSetBlaze) : Nat :=
@@ -434,6 +432,18 @@ not affect cardinality. -/
 def cardinality {Value : Type*} (run : Run Value) : Nat :=
   run.range.val.cardinality
 
+/-- Two runs with the same lower endpoint differ in cardinality by the
+translated tail between their upper endpoints; carried values are irrelevant. -/
+lemma cardinality_eq_add_right_extension {Value : Type*}
+    (initial current : Run Value)
+    (hlo : current.range.val.lo = initial.range.val.lo)
+    (hextend : initial.range.val.hi < current.range.val.hi) :
+    current.cardinality = initial.cardinality +
+      IntRange.rightExtensionCardinality
+        initial.range.val.hi current.range.val.hi := by
+  exact IntRange.NR.cardinality_eq_add_right_extension
+    initial.range current.range hlo hextend
+
 /-- Value-independent run order: the ranges are sorted and do not overlap. -/
 def disjointBefore {Value : Type*} (a b : Run Value) : Prop :=
   a.range.val.hi < b.range.val.lo
@@ -489,7 +499,7 @@ end Run
 /-- The number of scalar keys represented by a list of runs. For canonical
 run lists, disjointness makes this the cardinality of the map's support. -/
 def runsCardinality {Value : Type*} (runs : List (Run Value)) : Nat :=
-  runs.foldr (fun run total => run.cardinality + total) 0
+  (runs.map Run.cardinality).sum
 
 @[simp] lemma runsCardinality_nil {Value : Type*} :
     runsCardinality ([] : List (Run Value)) = 0 := rfl
@@ -502,9 +512,7 @@ def runsCardinality {Value : Type*} (runs : List (Run Value)) : Nat :=
     (left right : List (Run Value)) :
     runsCardinality (left ++ right) =
       runsCardinality left + runsCardinality right := by
-  induction left with
-  | nil => simp
-  | cons run rest ih => simp [ih, Nat.add_assoc]
+  simp [runsCardinality]
 
 /-- A run list has canonical shape when every earlier run canonically precedes every
 later run. -/

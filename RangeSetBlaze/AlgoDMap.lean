@@ -1456,43 +1456,6 @@ private def internalAddDMapLenRaw {Value : Type*} [DecidableEq Value]
                 ⟨gap.left.dropLast ++ left :: finished.runs,
                   finished.cachedLength⟩
 
-/-- Trimming a predecessor removes exactly the overwritten tail and retains
-the left residual. -/
-private lemma leftResidualBefore_cardinality
-    {Value : Type*} (start : Int) (run : Run Value)
-    (hstart : run.range.val.lo < start) (hoverlap : start ≤ run.range.val.hi) :
-    run.cardinality =
-      (leftResidualBefore start run hstart).cardinality +
-        IntRange.cardinality { lo := start, hi := run.range.val.hi } := by
-  simpa [Run.cardinality, leftResidualBefore] using
-    IntRange.cardinality_eq_left_residual_add_tail
-      run.range.val.lo start run.range.val.hi hstart hoverlap
-
-/-- Removing an overhanging successor and reinserting its right residual
-partitions the old successor into overwritten and retained cardinalities. -/
-private lemma rightResidualAfter_cardinality
-    {Value : Type*} (stop : Int) (run : Run Value)
-    (hlower : run.range.val.lo ≤ stop) (hextends : stop < run.range.val.hi) :
-    run.cardinality =
-      IntRange.cardinality { lo := run.range.val.lo, hi := stop } +
-        (rightResidualAfter stop run hextends).cardinality := by
-  simpa [Run.cardinality, rightResidualAfter] using
-    IntRange.cardinality_eq_prefix_add_right_residual
-      run.range.val.lo stop run.range.val.hi hlower hextends
-
-/-- A predecessor surrounding the input is partitioned into its left residual,
-the overwritten input, and its right residual. -/
-private lemma twoSidedPredecessorSplit_cardinality
-    {Value : Type*} (input : IntRange) (run : Run Value)
-    (hstart : run.range.val.lo < input.lo)
-    (hnonempty : input.lo ≤ input.hi) (hextends : input.hi < run.range.val.hi) :
-    run.cardinality =
-      (leftResidualBefore input.lo run hstart).cardinality + input.cardinality +
-        (rightResidualAfter input.hi run hextends).cardinality := by
-  simpa [Run.cardinality, leftResidualBefore, rightResidualAfter] using
-    IntRange.cardinality_eq_left_add_middle_add_right
-      run.range.val.lo run.range.val.hi input hstart hnonempty hextends
-
 /-- The cached forward cursor scan erases exactly to Algo DMap's scan, stops at
 the same continuation flag, and preserves an absolute-cache decomposition over
 the untouched base.
@@ -1565,12 +1528,12 @@ private theorem scanForwardDMapLen_preserves_correspondence_and_cardinality
                   · have hmergedCard : merged.cardinality = pending.cardinality +
                         IntRange.rightExtensionCardinality
                           pending.range.val.hi next.range.val.hi := by
-                      simpa [merged, mergeForward, Run.cardinality,
+                      simpa [merged, mergeForward,
                         max_eq_right hextend.le] using
-                        (IntRange.NR.cardinality_eq_add_right_extension
-                          pending.range merged.range (by simp [merged, mergeForward])
+                        Run.cardinality_eq_add_right_extension pending merged
+                          (by simp [merged, mergeForward])
                           (by simpa [merged, mergeForward,
-                            max_eq_right hextend.le]))
+                            max_eq_right hextend.le])
                     simp [afterExtension, afterRemoval, hstored, hextend,
                       hmergedCard, runsCardinality_cons] at hcache ⊢
                     omega
@@ -1744,12 +1707,12 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
               not_le.mp hcovered
             have hgrownCard : grown.cardinality = predecessor.cardinality +
                 IntRange.rightExtensionCardinality predecessor.range.val.hi input.hi := by
-              simpa [grown, fresh, mergeForward, Run.cardinality,
+              simpa [grown, fresh, mergeForward,
                 max_eq_right hextends.le] using
-                (IntRange.NR.cardinality_eq_add_right_extension
-                  predecessor.range grown.range (by simp [grown, mergeForward])
+                Run.cardinality_eq_add_right_extension predecessor grown
+                  (by simp [grown, mergeForward])
                   (by simpa [grown, fresh, mergeForward,
-                    max_eq_right hextends.le]))
+                    max_eq_right hextends.le])
             have hscan := scanForwardDMapLen_preserves_correspondence_and_cardinality
               grown true gap.right afterExtension
             have hscanCache := hscan.2.2 (runsCardinality init) (by
@@ -1793,8 +1756,10 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
                 exact htop
               injection haction with hleftEq hresidualEq
               subst left
-              simpa [removed] using leftResidualBefore_cardinality
-                input.lo predecessor hpredecessorStart hoverlap
+              simpa [removed, Run.cardinality, leftResidualBefore] using
+                IntRange.cardinality_eq_left_residual_add_tail
+                  predecessor.range.val.lo input.lo predecessor.range.val.hi
+                    hpredecessorStart hoverlap
           have hremoved : removed ≤ cachedLength := by
             omega
           let afterTrim := cachedLength - removed
@@ -1812,9 +1777,11 @@ private theorem internalAddDMapLenRaw_preserves_cardinality
                   rcases haction with ⟨hleftEq, hresidualEq⟩
                   subst left
                   subst residual
-                  simpa [fresh, Run.cardinality] using
-                    twoSidedPredecessorSplit_cardinality input predecessor
-                      hpredecessorStart hinput hextends
+                  simpa [fresh, Run.cardinality, leftResidualBefore,
+                    rightResidualAfter] using
+                    IntRange.cardinality_eq_left_add_middle_add_right
+                      predecessor.range.val.lo predecessor.range.val.hi input
+                        hpredecessorStart hinput hextends
                 · simp [hextends] at haction
               change afterTrim + fresh.cardinality + residual.cardinality =
                 runsCardinality (init ++ left :: fresh :: residual :: gap.right)
@@ -1889,7 +1856,7 @@ theorem internalAddDMapLen_mapResult {Value : Type*} [DecidableEq Value]
   · simp only [dif_neg hempty]
     rw [RangeMapBlaze.mk.injEq]
     exact internalAddDMapLenRaw_corresponds
-      map.runs cachedLength input value (by omega)
+      map.runs cachedLength input value (not_lt.mp hempty)
 
 /-- A valid incoming cached key count remains valid after DMapLen insertion. -/
 theorem internalAddDMapLen_cachedLength {Value : Type*} [DecidableEq Value]
@@ -1902,11 +1869,10 @@ theorem internalAddDMapLen_cachedLength {Value : Type*} [DecidableEq Value]
   by_cases hempty : input.hi < input.lo
   · simpa [hempty, RangeMapBlaze.cardinality] using hlength
   · simp only [dif_neg hempty]
-    have hraw := internalAddDMapLenRaw_preserves_cardinality map.runs
-      cachedLength
-      input value (by omega) map.canonical
-      (by simpa [RangeMapBlaze.cardinality] using hlength)
-    simpa [RangeMapBlaze.cardinality] using hraw
+    simpa [RangeMapBlaze.cardinality] using
+      internalAddDMapLenRaw_preserves_cardinality map.runs cachedLength
+        input value (not_lt.mp hempty) map.canonical
+        (by simpa [RangeMapBlaze.cardinality] using hlength)
 
 /-- DMapLen inherits Algo DMap's exact pointwise overwrite semantics. -/
 theorem internalAddDMapLen_toFunction {Value : Type*} [DecidableEq Value]
