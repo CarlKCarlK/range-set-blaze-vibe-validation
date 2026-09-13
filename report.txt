@@ -1,0 +1,12 @@
+Implemented AlgoE/AlgoELen via Unit-valued CMap/CMapLen.
+- Added [AlgoE.lean](/home/carlk/programs/range-set-blaze-lean2/RangeSetBlaze/AlgoE.lean)
+- Integrated exports in [RangeSetBlaze.lean](/home/carlk/programs/range-set-blaze-lean2/RangeSetBlaze.lean)
+- Added evaluation scenarios and cached-length checks in [Main.lean](/home/carlk/programs/range-set-blaze-lean2/Main.lean)
+- Reused internalAddCMapLen_cachedLength; no fresh insertion arithmetic proof.
+- Added Unit-map support/set and cardinality bridge lemmas.
+- lake build passes with zero warnings.
+- Direct AlgoE compilation passes.
+- git diff --check passes.
+- Axiom inventory: [propext, Classical.choice, Quot.sound].
+- Native tests produce expected merge results and cardinality 8.
+No commit created. Suggested commit message: Implement AlgoELen via Unit-valued CMapLen

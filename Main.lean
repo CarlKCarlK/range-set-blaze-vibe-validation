@@ -35,6 +35,12 @@ def addTouch   : RangeSetBlaze := internalAddC baseSet (ir 3 4)
 def addOverlap : RangeSetBlaze := internalAddC baseSet (ir 2 6)
 def addLeft    : RangeSetBlaze := internalAddC baseSet (ir (-5) (-3))
 def addEmpty   : RangeSetBlaze := internalAddC baseSet (ir 10 5)
+def addTouchE  : RangeSetBlaze := internalAddE baseSet (ir 3 4)
+def addBridgeE : RangeSetBlaze := internalAddE baseSet (ir 2 5)
+def addBeforeE : RangeSetBlaze := internalAddE baseSet (ir (-5) (-3))
+def addAfterE  : RangeSetBlaze := internalAddE baseSet (ir 9 10)
+def addEmptyE  : RangeSetBlaze := internalAddE baseSet (ir 10 5)
+def addOverlapE : RangeSetBlaze := internalAddE baseSet (ir 2 6)
 
 namespace RangeSetBlaze
 
@@ -54,6 +60,13 @@ def samplePoints : List Int :=
 #eval! samplePoints.filter (fun i => contains addOverlap i)
 #eval! samplePoints.filter (fun i => contains addLeft i)
 #eval! samplePoints.filter (fun i => contains addEmpty i)
+#eval! samplePoints.filter (fun i => contains addTouchE i)
+#eval! samplePoints.filter (fun i => contains addBridgeE i)
+#eval! samplePoints.filter (fun i => contains addBeforeE i)
+#eval! samplePoints.filter (fun i => contains addAfterE i)
+#eval! samplePoints.filter (fun i => contains addEmptyE i)
+#eval! samplePoints.filter (fun i => contains addOverlapE i)
+#eval! (internalAddELen baseSet baseSet.cardinality (ir 2 5)).cachedLength
 
 example : 4 ∈ addTouch.toSet := by
   have hEq := RangeSetBlaze.internalAddC_toSet baseSet (ir 3 4)
@@ -79,6 +92,11 @@ example : -4 ∈ addLeft.toSet := by
       -4 ∈ (internalAddC baseSet (ir (-5) (-3))).toSet :=
     hEq.symm ▸ hUnion
   simpa [addLeft] using hGoal
+
+example :
+    (internalAddELen baseSet baseSet.cardinality (ir 2 5)).cachedLength =
+      (internalAddELen baseSet baseSet.cardinality (ir 2 5)).setResult.cardinality := by
+  exact internalAddELen_cachedLength baseSet baseSet.cardinality (ir 2 5) rfl
 
 def demoScenarios :
     List (String × RangeSetBlaze) :=
