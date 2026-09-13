@@ -41,17 +41,11 @@ fn btreemap_cursor_remove_next_matches_right_consumption() {
     assert_eq!(cursor.peek_prev().map(|(key, _)| *key), Some(0));
     assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(10));
 
-    assert_eq!(
-        cursor.remove_next().map(|(key, value)| (key, value)),
-        Some((10, 'b'))
-    );
+    assert_eq!(cursor.remove_next(), Some((10, 'b')));
     assert_eq!(cursor.peek_prev().map(|(key, _)| *key), Some(0));
     assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(20));
 
-    assert_eq!(
-        cursor.remove_next().map(|(key, value)| (key, value)),
-        Some((20, 'c'))
-    );
+    assert_eq!(cursor.remove_next(), Some((20, 'c')));
     assert_eq!(cursor.peek_prev().map(|(key, _)| *key), Some(0));
     assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(30));
     assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![0, 30]);
@@ -132,31 +126,32 @@ fn btreemap_cursor_predecessor_mutation_matches_gap_model() {
 #[test]
 fn btreemap_cursor_mutation_sequence_preserves_expected_gap() {
     let mut map = BTreeMap::from([(0, 'a'), (10, 'b'), (20, 'c'), (30, 'd')]);
-    let mut cursor = map.lower_bound_mut(Bound::Included(&10));
-    assert_eq!(cursor.peek_prev().map(|(key, _)| *key), Some(0));
-    assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(10));
+    {
+        let mut cursor = map.lower_bound_mut(Bound::Included(&10));
+        assert_eq!(cursor.peek_prev().map(|(key, _)| *key), Some(0));
+        assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(10));
 
-    *cursor.peek_prev().unwrap().1 = 'z';
-    assert_eq!(
-        cursor.peek_prev().map(|(key, value)| (*key, *value)),
-        Some((0, 'z'))
-    );
-    assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(10));
-    cursor.remove_next().unwrap();
-    assert_eq!(
-        cursor.peek_prev().map(|(key, value)| (*key, *value)),
-        Some((0, 'z'))
-    );
-    assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(20));
-    cursor.remove_next().unwrap();
-    assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(30));
-    cursor.insert_before(15, 'x').unwrap();
-    assert_eq!(
-        cursor.peek_prev().map(|(key, value)| (*key, *value)),
-        Some((15, 'x'))
-    );
-    assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(30));
-    drop(cursor);
+        *cursor.peek_prev().unwrap().1 = 'z';
+        assert_eq!(
+            cursor.peek_prev().map(|(key, value)| (*key, *value)),
+            Some((0, 'z'))
+        );
+        assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(10));
+        cursor.remove_next().unwrap();
+        assert_eq!(
+            cursor.peek_prev().map(|(key, value)| (*key, *value)),
+            Some((0, 'z'))
+        );
+        assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(20));
+        cursor.remove_next().unwrap();
+        assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(30));
+        cursor.insert_before(15, 'x').unwrap();
+        assert_eq!(
+            cursor.peek_prev().map(|(key, value)| (*key, *value)),
+            Some((15, 'x'))
+        );
+        assert_eq!(cursor.peek_next().map(|(key, _)| *key), Some(30));
+    }
     assert_eq!(
         map.into_iter().collect::<Vec<_>>(),
         vec![(0, 'z'), (15, 'x'), (30, 'd')]

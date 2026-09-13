@@ -5,3 +5,7 @@ edition = "2024"
 
 [profile.dev]
 debug = 0
+
+[lib]
+name = "ordered_map_semantics"
+path = "src/lib.rs"

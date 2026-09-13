@@ -1,20 +1,24 @@
-# BTreeMap cursor semantics
+# Ordered-map semantics
 
-This tiny auxiliary project documents and validates the `std::collections::BTreeMap`
-cursor behavior assumed by the Lean `RangeSetBlaze/AlgoDMap.lean` model. It does
-not test `BTreeMap` correctness, and it is not a second implementation of
-RangeSetBlaze or a formal model of the standard library's internal tree.
+This auxiliary project documents and validates the observable
+`std::collections::BTreeMap` behavior assumed by the modeled RangeSetBlaze
+insertion and query paths. It contains an abstract semantic trait, a sorted-Vec
+reference implementation, a thin `BTreeMap` adapter, differential tests, and
+focused direct cursor tests.
+
+It does not prove `BTreeMap` correct and is not a model of the standard
+library's internal tree.
 
 The confidence chain is:
 
 ```text
-Rust BTreeMap cursor API
-        ↓
-executable cursor-semantics tests
-        ↓
-Lean CursorGap abstraction
-        ↓
-AlgoDMap correctness proof
+Lean sorted-list semantics
+        ↕
+sorted-Vec SemanticOrderedMap
+        ↕ differential tests
+BTreeMapAdapter
+        ↕
+modeled production API usage
 ```
 
 The Lean model intentionally excludes internal B-tree nodes, rotations,
@@ -25,9 +29,10 @@ borrowing, ownership machinery, and related implementation details.
 The production crate uses the nightly-only `BTreeMap` cursor API with the
 `btree_cursors` feature gate, selected by its
 `cursor_nightly_experimental` Cargo feature. The API names exercised here are
-`lower_bound_mut`, `peek_prev`, `peek_next`, `remove_next`, and
-`insert_before`. This project pins the `nightly` channel through
-`rust-toolchain.toml`; record the exact `rustc --version` used when running it.
+ordered iteration and range direction, insertion/replacement, removal,
+value-only mutation, `lower_bound`, `lower_bound_mut`, `peek_prev`,
+`peek_next`, `remove_next`, and `insert_before`. The project pins
+`nightly-2026-04-03` in `rust-toolchain.toml`.
 
 ## Correspondence
 
@@ -39,14 +44,21 @@ The production crate uses the nightly-only `BTreeMap` cursor API with the
 | Mutating the value through `peek_prev` leaves cursor position unchanged | predecessor mutation replaces the last `left` entry | Yes |
 | `insert_before` inserts at the gap and moves the gap after the inserted entry | `insertBefore` / emitted pending run is between finalized `left` and untouched `right` | Yes |
 
-The tests also cover the production-shaped sequence: position, inspect the
-predecessor, mutate it locally, remove one or more successors, insert before
-the gap, and inspect both sides immediately after every mutation.
+The differential tests compare every returned observation and the complete
+ordered state after mutations. They include exhaustive small maps, exhaustive
+short operation sequences, structured end/payload mutation, and deterministic
+randomized sequences. The original direct cursor tests remain focused
+regressions.
+
+See `../specs/ordered-map-semantics.md` for the contract and
+`../specs/ordered-map-semantics-audit.md` for the production inventory and
+Rust-to-Lean correspondence.
 
 ## Running
 
 ```bash
-cargo +nightly test --manifest-path rust-tests/Cargo.toml
-cargo +nightly fmt --manifest-path rust-tests/Cargo.toml -- --check
-cargo +nightly clippy --manifest-path rust-tests/Cargo.toml -- -D warnings
+cd rust-tests
+cargo test
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
 ```
