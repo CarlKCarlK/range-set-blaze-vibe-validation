@@ -414,8 +414,8 @@ end RangeSetBlaze
 Raw run lists have first-match semantics, while `RangeMapBlaze` packages a
 canonical list. Input ranges reuse `IntRange`, and stored runs reuse `NR`.
 
-We maintain the canonical representation invariant, but do not prove canonical
-uniqueness; uniqueness is not needed for the semantic foundation developed here.
+This module maintains the canonical representation invariant. Its semantic
+uniqueness theorem is proved separately in `RangeSetBlaze.Canonical`.
 -/
 
 namespace RangeMapBlaze
