@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "btreemap-cursor-semantics"
+name = "ordered-map"
 version = "0.1.0"

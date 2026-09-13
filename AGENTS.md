@@ -1,5 +1,7 @@
 # Repository guidance
 
+When proposing a git commit, suggest a commit message that is just a line or two long. Do not add a "Co-Authored-By" line or any other AI attribution.
+
 Before substantive proof or refactoring work, read:
 
 - `specs/lean-proof-refactoring.md`

@@ -1,4 +1,15 @@
-# Ordered-map semantics audit
+# Ordered-map API audit
+
+> **Naming note:** the names below (`SemanticOrderedMap`, `BTreeMapAdapter`,
+> `predecessors_le_descending`, etc.) reflect this audit's starting state and
+> are historical. A later API cleanup pass (§ "API cleanup pass" below)
+> renamed/removed several of them to the current public names. For the
+> current public API itself, read the `ordered_map` crate's rustdoc
+> (`cargo doc --no-deps` in `rust-tests/`, starting from [`OrderedMap`]); for
+> the current contract description, see `ordered-map.md`. The production
+> inventory and Rust-to-Lean correspondence below remain accurate.
+
+[`OrderedMap`]: ../rust-tests/src/lib.rs
 
 ## Starting state
 
@@ -83,7 +94,7 @@ types. The Vec cursor stores `gap: usize`, with `entries[..gap]` and
 
 | Suite | Coverage |
 |---|---|
-| `btreemap_cursor_semantics.rs` (5 retained tests) | direct lower bound, `remove_next`, `insert_before`, predecessor mutation, combined mutation sequence |
+| `btreemap_cursor.rs` (5 retained tests; file renamed from `btreemap_cursor_semantics.rs` in the later API cleanup pass) | direct lower bound, `remove_next`, `insert_before`, predecessor mutation, combined mutation sequence |
 | `vec_reference_contract_has_explicit_expected_results` | independent expected results for sorting/uniqueness, bounds, replacement/removal, and cursor transitions |
 | `exhaustive_small_maps_match_all_order_observations` | 32 small map shapes × 7 query positions; ordered state, predecessor/successor, descending/ascending ranges, immutable cursor neighbors |
 | `insert_replace_remove_and_value_mutation_match` | new insert, replacement return, predecessor/successor value-only mutation, absent boundaries, repeated removal |
@@ -204,3 +215,57 @@ The final architectural assessment is that the ADT surface is minimal for the
 modeled paths, the Vec code is a direct executable reading of the contract, the
 adapter exercises the actual standard-library API shapes, and the existing
 Lean sorted-list proofs provide the required formal side of the boundary.
+
+## API cleanup pass (historical)
+
+A later pass renamed the types audited above to their current public names
+(`SemanticOrderedMap` → `OrderedMap`, `SemanticCursor[Mut]` → `Cursor`/
+`CursorMut`, `BTreeMapAdapter`/`BTreeCursor[Mut]` deleted in favor of
+`BTreeMap`/`btree_map::Cursor[Mut]` implementing the traits directly), moved
+the resulting API documentation into rustdoc, and made two trait-surface
+changes to the operation set audited above. This section records why, for
+anyone tracing the history; the current API itself is documented in the
+`ordered_map` crate's rustdoc, not here.
+
+**`predecessors_le_descending` was removed.** A research pass over the
+production `range-set-blaze` insertion code (`map.rs`'s
+`internal_add_baseline`, mirrored in `set.rs`) found that the reversed
+predecessor iterator (`range_mut(..=key).rev()`) is never drained into an
+arbitrary-length collection in production: it is called `.next()` at most
+twice — the immediate predecessor, then, in one map-insertion branch, a
+"predecessor before the predecessor" check. A `Vec`-returning trait method
+covering an unbounded descending walk was more general than any real call
+site. The two-step production pattern is fully expressible with
+`predecessor_le(key)` for the first step and `predecessor_lt(&first.0)` for
+the second; no new trait method was needed.
+`tests/ordered_map_differential.rs::chained_predecessor_lookups_match_two_step_descending_walk`
+covers this pattern.
+
+**`successors_ge_ascending` was kept, renamed to `successors_ge`, and changed
+to take `&self`.** The same research pass found this *does* have a genuine
+production analogue: `delete_extra` (map.rs) and its set-side mirror collect
+a data-dependent, unbounded-in-principle prefix of the ascending suffix
+(however many touching/overlapping runs a mutation must absorb) before
+deciding how much to consume. Unlike the predecessor case, this walk's
+length isn't fixed at compile time, so a single-lookup primitive can't
+express it; returning the whole suffix and letting the caller decide how
+much to use matches both the production code and how the Lean model already
+treats it (a `List.takeWhile`-style prefix of a forward scan). The only
+defect in the original name was an `&mut self`-for-no-reason artifact of how
+the `BTreeMap` adapter was originally written; it was fixed by implementing
+the method with `range(key..)` (immutable) instead of `range_mut`.
+
+Every other trait method audited above has a direct, cited production call
+site (see the table in "ADT and implementations" above) and was kept under
+its audited name (or, for the `BTreeMap`-shaped cursor operations, its exact
+`BTreeMap`/`btree_map::Cursor[Mut]` name).
+
+Verification at the time of that pass (pinned toolchain
+`nightly-2026-04-03`, `rustc 1.96.0-nightly`, in `rust-tests/`): `cargo fmt
+--check`, `cargo build`, `cargo test` (14 integration tests: the 13 audited
+above plus the new chained-lookup test, 0 failed), `cargo test --doc`
+(16/16 doctests), `cargo clippy --all-targets --all-features -- -D
+warnings` (0 warnings), `cargo doc --no-deps` (manually inspected), and
+`git diff --check` all passed. No test coverage was lost: all 13 original
+test functions passed unchanged in behavior, plus the one new differential
+test replacing the removed `predecessors_le_descending` coverage.

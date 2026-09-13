@@ -1,5 +1,5 @@
 [package]
-name = "btreemap-cursor-semantics"
+name = "ordered-map"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,5 +7,5 @@ edition = "2024"
 debug = 0
 
 [lib]
-name = "ordered_map_semantics"
+name = "ordered_map"
 path = "src/lib.rs"

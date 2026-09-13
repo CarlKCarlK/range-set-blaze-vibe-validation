@@ -1,12 +1,23 @@
-# Ordered-map semantics used by the RangeSetBlaze proofs
+# Ordered-map contract used by the RangeSetBlaze proofs
+
+This document describes the current `ordered_map` Rust contract and its
+relationship to the Lean proofs. For the public Rust API itself — every
+method's exact signature, its precise `BTreeMap` correspondence, and runnable
+examples — read the crate's rustdoc (`cargo doc --no-deps` in `rust-tests/`,
+starting from the crate root and [`OrderedMap`]). This spec does not restate
+that API documentation; it explains the proof/validation correspondence
+around it.
+
+[`OrderedMap`]: ../rust-tests/src/lib.rs
 
 ## Claim and boundary
 
 This is an abstract ordered-map contract, not a proof of Rust's
 `std::collections::BTreeMap`. The Lean development proves range-set and
-range-map algorithms over sorted lists. The Rust auxiliary project supplies a
-visibly equivalent sorted-`Vec` reference implementation and differential tests
-that corroborate the behavior of the `BTreeMap` APIs used by the modeled
+range-map algorithms over sorted lists. The Rust auxiliary project (crate
+`ordered_map`, in `rust-tests/`) supplies a visibly equivalent sorted-`Vec`
+reference implementation (`VecOrderedMap`) and differential tests that
+corroborate the behavior of the `BTreeMap` APIs used by the modeled
 production algorithms.
 
 The evidence chain is:
@@ -14,9 +25,9 @@ The evidence chain is:
 ```text
 Lean sorted-list semantics
         ↕ documented refinement
-SemanticOrderedMap over a sorted unique Vec
+OrderedMap over VecOrderedMap (a sorted unique Vec)
         ↕ differential tests
-BTreeMapAdapter over std::collections::BTreeMap
+OrderedMap over std::collections::BTreeMap
         ↕ direct API correspondence
 modeled RangeSetBlaze production paths
 ```
@@ -34,34 +45,18 @@ An ordered map is observed as a sequence of `(key, value)` pairs satisfying:
 
 `VecOrderedMap<K, V>` in `rust-tests/src/lib.rs` is the executable reference.
 It keeps this invariant by binary search and direct `Vec` insertion/removal.
-`BTreeMapAdapter<K, V>` implements the same local semantic trait using only
-the relevant standard-library APIs. Trait results are cloned observations so
-Rust reference types and lifetimes do not leak into the contract.
+`std::collections::BTreeMap<K, V>` implements the same `OrderedMap` trait
+directly (no adapter or wrapper type). Trait results are cloned observations
+so Rust reference types and lifetimes do not leak into the contract.
 
-## Ordinary operations
+## Why the contract is narrow
 
 The contract contains only the operations required by the modeled insertion,
-query, and cached-length paths:
-
-- `ordered_entries`: all entries exactly once in strictly increasing key order;
-- `predecessor_le(k)`: the entry with greatest key at most `k`;
-- `predecessor_lt(k)`: the entry with greatest key below `k`;
-- `successor_ge(k)`: the entry with least key at least `k`;
-- `predecessors_le_descending(k)`: all entries at or below `k`, greatest first;
-- `successors_ge_ascending(k)`: all entries at or above `k`, least first;
-- `insert(k, v)`: insert a new key or replace the value at an existing key,
-  returning the previous value exactly when replacement occurs;
-- `remove(k)`: return and delete exactly the entry at `k`, leaving every other
-  entry unchanged;
-- `set_predecessor_value` and `set_successor_value`: change only the value of
-  the selected neighboring entry. Its key, position, and all other entries are
-  unchanged.
-
-The descending predecessor sequence captures the map insertion branch that
-examines the predecessor and, in one map case, the predecessor before it. The
-ascending suffix captures baseline forward mutation and deletion. These
-operations intentionally state semantic results rather than Rust iterator
-mechanics.
+query, and cached-length paths, named for the specific `BTreeMap::range`
+expressions they stand in for rather than as a general iterator model. See
+the crate-level and `OrderedMap` rustdoc for the full rationale and the
+per-method `BTreeMap` correspondence table; it is not repeated here to avoid
+two copies drifting apart.
 
 Exact-key `BTreeMap::get`, `contains_key`, first/last entry APIs, entry APIs,
 and split/pop/retain operations are not assumptions of the currently proved
@@ -97,23 +92,6 @@ The mutable operations have these exact transitions:
 
 `remove_prev`, `insert_after`, and arbitrary cursor movement are absent because
 the modeled production paths do not use them.
-
-## Rust API mapping
-
-| Production API shape | Abstract operation |
-|---|---|
-| `iter()` | `ordered_entries` |
-| `range(..=k).next_back()` | `predecessor_le` |
-| repeated `range_mut(..=k).rev().next()` | `predecessors_le_descending` / `predecessor_lt` |
-| `range(k..).next()` | `successor_ge` |
-| `range_mut(k..)` | `successors_ge_ascending` |
-| `insert` | `insert` |
-| `remove` | `remove` |
-| mutation through a range result | neighbor value mutation |
-| `lower_bound[ _mut ](Included(k))` | lower-bound gap |
-| `peek_prev`, `peek_next` | adjacent gap observations |
-| `remove_next` | consume the right head without moving the gap |
-| `insert_before` | ordered insertion followed by a gap move |
 
 ## Lean correspondence
 
@@ -151,12 +129,16 @@ unsupported assumption.
 For every operation, tests compare returned observations and the entire ordered
 entry sequence after mutation. They cover empty and singleton maps, all cursor
 positions, exact keys and gaps, first/last removal, replacement, value mutation,
-repeated changes, cursor mutation sequences, and the post-`insert_before` gap.
+repeated changes, cursor mutation sequences, and the post-`insert_before` gap:
+32 subsets of a five-key domain across seven query positions, all 7,776
+length-five sequences drawn from three inserts and three removals, and 10,000
+deterministic pseudo-random operation steps, plus a handful of focused direct
+`BTreeMap` cursor regression tests kept from before the differential suite
+existed.
 
-The eight new suites include all 32 subsets of a five-key domain across seven
-query positions, all 7,776 length-five sequences drawn from three inserts and
-three removals, and 10,000 deterministic pseudo-random operation steps. The
-original five direct `BTreeMap` cursor tests remain as focused regression tests.
+See `specs/ordered-map-audit.md` for the production call-site inventory,
+Rust-to-Lean correspondence, and the history of the crate's naming/API
+cleanup pass.
 
 ## Outside the model
 
@@ -167,7 +149,8 @@ original five direct `BTreeMap` cursor tests remain as focused regression tests.
 - unmodeled production APIs such as `split_off`, entry/pop, clear, retain, and
   first/last entry operations;
 - the correspondence between generic bounded Rust `Integer` types and Lean's
-  unbounded dense `Int` (notably checked successor/predecessor and `char` gaps);
+  unbounded dense `Int` (notably checked successor/predecessor and `char`
+  gaps);
 - cached-length arithmetic itself, which has separate Lean proofs;
 - a formal proof that `BTreeMap` refines this contract.
 
