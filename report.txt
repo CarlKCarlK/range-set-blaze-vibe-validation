@@ -1,0 +1,35 @@
+AlgoELen is implemented, proved, integrated, tested, and fully validated. Nothing is committed.
+
+Where the work lives. The prompt named /home/carlk/programs/range-set-blaze-lean2, but my sandbox is the exp1/luna checkout, which had no AlgoE at all, so I built everything there. The other checkout holds a separate uncommitted AlgoE draft with private per-file bridges. I used it only as a reference; the version here moves the bridge to shared mathematics and is smaller.
+
+Implementation shape. AlgoE is toRangeSet ∘ internalAddCMap _ input () ∘ toUnitMap. AlgoELen is the same composition through internalAddCMapLen, returning an ELenResult with the set and the cached Nat count. See AlgoE.lean.
+
+Main theorems. internalAddE_toSet, internalAddELen_setResult, and internalAddELen_cachedLength, in the same invariant style as CLen/DLen: a correct incoming count yields a count equal to the result cardinality. The _toSet corollary is kept only for parity with the four existing Len APIs. internalAddE_eq_internalAddA joins the cross-algorithm equalities in CrossAlgorithm.lean.
+
+Proof reuse. No fresh induction over insertion. Both Len theorems are CMapLen's theorems transported across the bridge, each a two-line proof. The set-semantics proof is CMap's overwrite theorem plus one by_cases on membership in the input.
+
+New shared mathematics, added at the end of Basic.lean under "Range sets as Unit-valued range maps":
+
+RangeSetBlaze.toUnitMap and RangeMapBlaze.toRangeSet, with canonicality carried by List.pairwise_map and the equal-value clause of Run.before.
+toRangeSet_toUnitMap (round trip is the identity, @[simp]), toRangeSet_toSet (forgetting values keeps the support), toRangeSet_cardinality (keeps the count).
+One private lemma stating that first-match interpretation is defined exactly on the union of the run ranges, for any value type.
+Cleanup. Relative to the reference draft: removed its private asUnitMap_ranges, unitMap_toSet, unitMap_cardinality, asUnitMap_support, and unitMap_overwrite_set; the two one-line consequences the algorithm needs (support and cardinality of toUnitMap) are derived inline from the round trip rather than stated. No existing helper was duplicated or subsumed, so no cross-file deletions were needed. Inference pass: proofs use term-mode congrArg, Set.ext, and .imp where possible, no type annotations, no DecidableEq beyond the Unit instance CMap requires.
+
+Tests. Regression.lean now checks A through E for identical range lists, and ELen against AlgoE's representation, CLen's cached count, and the result cardinality, across all twelve existing situations plus exact overlap, right adjacency, containing several ranges, and a gap fill between two ranges. Main.lean gains one AlgoE demo scenario and an evaluated ELen count.
+
+Metrics (collector v3, working tree):
+
+file	active LOC	comment LOC	branching	have	rw	pub thm
+Basic.lean	454→485	91→105	7→9	10	26	49→52
+AlgoE.lean (new)	38	17	1	1	4	4
+CrossAlgorithm.lean	34→39	9→11	0	0	5→6	5→6
+Regression.lean	41→54	7→11	0	0	0	0
+repository	8012→8104	576→613	320→323	1017→1018	307→312	86→94
+Validation. lake build succeeds with zero warnings. No sorry, sorryAx, admit, source axiom, unsafe, or implemented_by in the sources. git diff --check is clean. All AlgoE and ELen theorems depend only on propext, Classical.choice, Quot.sound; the two bridge lemmas need only propext and Quot.sound.
+
+Remaining opportunity. The bridge shows a range set is exactly a Unit map, so a later pass could derive AlgoE's cross-algorithm equality to CMap-at-Unit for every set algorithm, but nothing in the current scope needs it.
+
+Suggested commit message:
+
+
+Add Algo E and ELen: set insertion derived from Algo CMap at Unit

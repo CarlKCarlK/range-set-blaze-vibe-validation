@@ -658,3 +658,61 @@ example :
 end Examples
 
 end RangeMapBlaze
+
+/-!
+## Range sets as `Unit`-valued range maps
+
+A canonical range set is the same data as a canonical range map whose runs all
+carry `()`: with every value equal, canonical run order is exactly the
+gap-separated range order. The conversions below supply or forget the trivial
+values. They preserve the represented key set and its cardinality, which lets
+set algorithms be derived from map algorithms.
+-/
+
+namespace RangeSetBlaze
+
+/-- View a range set as the `Unit`-valued range map with the same ranges. -/
+def toUnitMap (s : RangeSetBlaze) : RangeMapBlaze Unit :=
+  ⟨s.ranges.map fun range => ⟨range, ()⟩, List.pairwise_map.mpr <|
+    s.canonical.imp fun h => ⟨(lt_add_one _).trans h, fun _ => h⟩⟩
+
+end RangeSetBlaze
+
+namespace RangeMapBlaze
+
+/-- Forget the trivial values of a `Unit`-valued range map, keeping its ranges. -/
+def toRangeSet (map : RangeMapBlaze Unit) : RangeSetBlaze :=
+  ⟨map.runs.map Run.range, List.pairwise_map.mpr <|
+    map.canonical.imp fun h => h.2 rfl⟩
+
+/-- Supplying and then forgetting `Unit` values is the identity on range sets. -/
+@[simp] lemma toRangeSet_toUnitMap (s : RangeSetBlaze) : s.toUnitMap.toRangeSet = s := by
+  cases s
+  simp [toRangeSet, RangeSetBlaze.toUnitMap, Function.comp_def]
+
+/-- First-match interpretation is defined exactly on the union of the run
+ranges, whatever the values. -/
+private lemma runsToFunction_ne_none_iff {Value : Type*}
+    (runs : List (Run Value)) (key : Int) :
+    runsToFunction runs key ≠ none ↔
+      key ∈ RangeSetBlaze.rangesToSet (runs.map Run.range) := by
+  induction runs with
+  | nil => simp
+  | cons run rest ih =>
+      simp only [runsToFunction_cons, List.map_cons, RangeSetBlaze.rangesToSet_cons,
+        Set.mem_union, IntRange.mem_toSet_iff, ← ih]
+      split <;> simp_all
+
+/-- Forgetting `Unit` values keeps the represented key set. -/
+lemma toRangeSet_toSet (map : RangeMapBlaze Unit) :
+    map.toRangeSet.toSet = map.support :=
+  Set.ext fun key => (runsToFunction_ne_none_iff map.runs key).symm
+
+/-- Forgetting `Unit` values keeps the represented key count. -/
+lemma toRangeSet_cardinality (map : RangeMapBlaze Unit) :
+    map.toRangeSet.cardinality = map.cardinality := by
+  simp only [toRangeSet, RangeSetBlaze.cardinality, RangeSetBlaze.rangesCardinality,
+    cardinality, runsCardinality, List.map_map]
+  rfl
+
+end RangeMapBlaze
