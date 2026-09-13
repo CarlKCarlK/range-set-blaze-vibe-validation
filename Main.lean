@@ -35,6 +35,7 @@ def addTouch   : RangeSetBlaze := internalAddC baseSet (ir 3 4)
 def addOverlap : RangeSetBlaze := internalAddC baseSet (ir 2 6)
 def addLeft    : RangeSetBlaze := internalAddC baseSet (ir (-5) (-3))
 def addEmpty   : RangeSetBlaze := internalAddC baseSet (ir 10 5)
+def addBridgeE : RangeSetBlaze := internalAddE baseSet (ir 2 5)
 
 namespace RangeSetBlaze
 
@@ -54,6 +55,8 @@ def samplePoints : List Int :=
 #eval! samplePoints.filter (fun i => contains addOverlap i)
 #eval! samplePoints.filter (fun i => contains addLeft i)
 #eval! samplePoints.filter (fun i => contains addEmpty i)
+#eval! samplePoints.filter (fun i => contains addBridgeE i)
+#eval! (internalAddELen baseSet baseSet.cardinality (ir 2 5)).cachedLength
 
 example : 4 ∈ addTouch.toSet := by
   have hEq := RangeSetBlaze.internalAddC_toSet baseSet (ir 3 4)
@@ -86,7 +89,8 @@ def demoScenarios :
    ("addTouch", addTouch),
    ("addOverlap", addOverlap),
    ("addLeft", addLeft),
-   ("addEmpty", addEmpty)]
+   ("addEmpty", addEmpty),
+   ("addBridgeE", addBridgeE)]
 
 def main : IO Unit := do
   IO.println "RangeSetBlaze sample membership:"

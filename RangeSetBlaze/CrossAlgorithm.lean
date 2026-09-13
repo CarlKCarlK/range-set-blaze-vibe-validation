@@ -6,6 +6,7 @@ import RangeSetBlaze.AlgoD
 import RangeSetBlaze.AlgoAMap
 import RangeSetBlaze.AlgoCMap
 import RangeSetBlaze.AlgoDMap
+import RangeSetBlaze.AlgoE
 
 namespace RangeSetBlaze
 
@@ -28,6 +29,13 @@ theorem internalAddD_eq_internalAddA (set : RangeSetBlaze) (input : IntRange) :
     internalAddD set input = internalAddA set input := by
   apply RangeSetBlaze.ext
   rw [internalAddD_toSet, internalAddA_toSet]
+
+/-- Map-derived Algo E produces the same canonical representation as
+reference Algo A. -/
+theorem internalAddE_eq_internalAddA (set : RangeSetBlaze) (input : IntRange) :
+    internalAddE set input = internalAddA set input := by
+  apply RangeSetBlaze.ext
+  rw [internalAddE_toSet, internalAddA_toSet]
 
 end RangeSetBlaze
 
