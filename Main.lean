@@ -54,6 +54,9 @@ def samplePoints : List Int :=
 #eval! samplePoints.filter (fun i => contains addOverlap i)
 #eval! samplePoints.filter (fun i => contains addLeft i)
 #eval! samplePoints.filter (fun i => contains addEmpty i)
+#eval! (internalAddELen baseSet 6 (ir 3 4)).cachedLength
+#eval! (internalAddELen baseSet 6 (ir 2 6)).cachedLength
+#eval! (internalAddELen baseSet 6 (ir 10 5)).cachedLength
 
 example : 4 ∈ addTouch.toSet := by
   have hEq := RangeSetBlaze.internalAddC_toSet baseSet (ir 3 4)

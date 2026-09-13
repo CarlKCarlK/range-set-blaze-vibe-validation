@@ -1,0 +1,16 @@
+Implemented AlgoE and AlgoELen end-to-end.
+- Added Unit-map conversion and erasure bridges in [AlgoE.lean](/home/carlk/programs/range-set-blaze-lean2/RangeSetBlaze/AlgoE.lean).
+- Added internalAddE via internalAddCMap.
+- Added internalAddELen via internalAddCMapLen.
+- Proved set correctness and cached-cardinality correctness.
+- Added integration exports and evaluation checks in [Main.lean](/home/carlk/programs/range-set-blaze-lean2/Main.lean).
+- Added cardinality/support bridge lemmas; no fresh insertion induction was needed.
+Validation:
+- lake build passes with zero warnings.
+- Evaluation checks return 8, 8, and 6 for touch, overlap, and empty-input cases.
+- No sorry, admit, source axioms, unsafe, or implemented_by.
+- #print axioms reports only [propext, Classical.choice, Quot.sound].
+- git diff --check passes.
+- Metrics: AlgoE 107 physical / 91 active LOC; AlgoELen 43 physical / 35 active LOC.
+No commit was created.
+Suggested commit message: Implement and prove AlgoELen via Unit-valued map insertion
