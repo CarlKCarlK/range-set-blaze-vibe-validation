@@ -1,0 +1,40 @@
+Everything is implemented, proved, tested, and validated. Here's the final report.
+
+AlgoE / AlgoELen — final report
+1. Implementation shape. RangeSetBlaze/AlgoE.lean (new file) adds a toMap : RangeSetBlaze → RangeMapBlaze Unit / RangeMapBlaze.eraseValue : RangeMapBlaze Value → RangeSetBlaze (for [Subsingleton Value]) conversion pair, then:
+
+internalAddE s r := (internalAddCMap s.toMap r ()).eraseValue — AlgoE is literally "attach Unit, run Algo CMap, forget values."
+internalAddELen s cachedLength r := the same via internalAddCMapLen, returning a new ELenResult (mirrors CLenResult/DLenResult's shape).
+2. Main theorems (mirrors the CLen/DLen 3-theorem pattern exactly):
+
+internalAddE_toSet : (internalAddE s r).toSet = s.toSet ∪ r.toSet
+internalAddELen_setResult, internalAddELen_cachedLength (the headline cached-cardinality invariant), internalAddELen_toSet
+internalAddE_eq_internalAddA added to CrossAlgorithm.lean alongside B/C/D.
+3. Proof reuse vs. fresh induction. Fully reused. AlgoE.lean itself contains zero induction/cases/by_cases — every fact is inherited from internalAddCMap_toFunction/internalAddCMapLen_cachedLength through the bridge. Only 2 short inductions were needed anywhere, both in Basic.lean as genuinely new shared math (see below).
+
+4. New shared lemmas (Basic.lean, general — not AlgoE-specific):
+
+Run.before_iff_range_before — for [Subsingleton Value], canonical run order coincides with canonical range order (the key mathematical fact: Unit has one value, so the "touching but distinct value" case that ordinarily blocks merging can't arise).
+canonical_iff_range_canonical — lifts that to full list canonicality.
+support_eq_rangesToSet — a map's support equals the union of its runs' ranges (one clean induction).
+overwrite_ne_none_iff — overwrite's defined-keys characterization (one by_cases).
+5. Helpers removed: none pre-existing to remove — this was net-new territory (confirmed by inventory: no Set↔Map bridge existed anywhere in the repo). Cleanup did tighten the new code itself: an initial 3-way duplicated "attach-then-forget" computation was consolidated into one round-trip theorem toMap_eraseValue, with toMap_support/toMap_cardinality now one-line corollaries of it.
+
+6. Cross-file cleanup: compared against CLen/DLen/CMapLen/DMapLen; reused internalAddCMap_toFunction, internalAddCMapLen_mapResult, internalAddCMapLen_cachedLength directly rather than duplicating any arithmetic. Kept ELenResult as its own struct (matching the existing precedent of separate CLenResult/DLenResult/CMapLenResult/DMapLenResult rather than a speculative shared generic wrapper, since unifying those would be an unrelated refactor of frozen Phase-3 code).
+
+7. Inference/API cleanup: final public surface in AlgoE.lean is 4 definitions + 9 public theorems + 1 private lemma — no redundant theorem families (no separate "representation agreement" / "semantic agreement" / "length agreement" split; each theorem earns its place).
+
+8. Tests (Regression.lean): extended sameAcrossAlgorithms to include AlgoE (covers all 12 existing control-flow cases automatically) plus 6 new cases for exact overlap, both-direction containment, left merge, and left/right touching adjacency; added elenCachedLengthCorrect/elenMatchesAlgoE executable checks (via native_decide) covering empty-set insertion, disjoint insertion, containment, merges, and multi-range bridging.
+
+9. Metrics (repo dashboard totals, before → after): definitions/abbreviations 122→128, public theorems 86→101 (+15), private 109→110 (+1), induction 41→42 (+1), by_cases 171→172 (+1), cases 108→108 (0), rw 307→324, show 41→45, simp 674→680. List-splitting "representation detail" tokens (takeWhile/dropWhile/getLast?/List.span/etc.) are unchanged — AlgoE touches none of that machinery, confirming it added no algorithmic complexity, only the bridge.
+
+10. Axioms: #print axioms on all four new public theorems plus the cross-algorithm agreement theorem shows exactly [propext, Classical.choice, Quot.sound] — the same envelope as the frozen internalAddC_toSet.
+
+11. Validation: lake build (full repo, 1894 jobs) — zero errors, zero warnings. No sorry, sorryAx, admit, source axiom, unsafe, or implemented_by anywhere. git diff --check clean.
+
+12. Remaining opportunity / caveat: the task brief was written as if AlgoE already existed in the repo; it didn't (confirmed via code, git history, and specs search), so this was ground-up design rather than discovery — I flagged that and you chose AlgoCMap as the delegate before I proceeded. One open question worth a future look: toMap/eraseValue are stated generally over [Subsingleton Value] even though only Unit is exercised today — that generality was free to write and may be useful if RangeMapBlaze ever needs a second trivial-valued instantiation, but if that direction is unwanted, it can trivially be narrowed to Unit alone.
+
+Everything is green and nothing was committed. Suggested commit message:
+
+
+Add Algo E (set insertion via Unit-valued Algo CMap) and Algo ELen

@@ -2,6 +2,7 @@ import RangeSetBlaze.AlgoA
 import RangeSetBlaze.AlgoB
 import RangeSetBlaze.AlgoC
 import RangeSetBlaze.AlgoD
+import RangeSetBlaze.AlgoE
 
 namespace RangeSetBlaze
 
@@ -27,7 +28,8 @@ private def testSet (ranges : List NR)
 private def sameAcrossAlgorithms (s : RangeSetBlaze) (r : IntRange) : Bool :=
   (internalAddA s r).ranges == (internalAddB s r).ranges &&
   (internalAddB s r).ranges == (internalAddC s r).ranges &&
-  (internalAddC s r).ranges == (internalAddD s r).ranges
+  (internalAddC s r).ranges == (internalAddD s r).ranges &&
+  (internalAddD s r).ranges == (internalAddE s r).ranges
 
 example : (internalAddD (testSet [testNR 10 30]) { lo := 10, hi := 20 }).ranges =
     [testNR 10 30] := by native_decide
@@ -53,5 +55,45 @@ example : sameAcrossAlgorithms (testSet [testNR 10 12, testNR 14 16, testNR 18 2
 example : sameAcrossAlgorithms (testSet [testNR 1 5, testNR 10 12]) { lo := 4, hi := 7 } := by native_decide
 example : sameAcrossAlgorithms (testSet [testNR 1 5, testNR 8 10, testNR 20 22]) { lo := 4, hi := 7 } := by native_decide
 example : sameAcrossAlgorithms (testSet [testNR 1 5, testNR 8 10, testNR 13 15, testNR 30 35]) { lo := 4, hi := 13 } := by native_decide
+
+/-!
+## Algo E and Algo ELen
+
+Algo E is exercised through `sameAcrossAlgorithms` above and through the
+dedicated cases below, chosen to cover exact overlap, strict containment in
+both directions, one-sided merges, and touching adjacency: control-flow shapes
+the shared twelve cases above do not each hit. `elenCachedLengthCorrect`
+executes `internalAddELen_cachedLength`'s conclusion directly, independently
+of the Lean proof.
+-/
+
+example : sameAcrossAlgorithms (testSet [testNR 10 20]) { lo := 10, hi := 20 } := by native_decide
+example : sameAcrossAlgorithms (testSet [testNR 10 30]) { lo := 15, hi := 20 } := by native_decide
+example : sameAcrossAlgorithms (testSet [testNR 10 12]) { lo := 5, hi := 20 } := by native_decide
+example : sameAcrossAlgorithms (testSet [testNR 10 20]) { lo := 5, hi := 12 } := by native_decide
+example : sameAcrossAlgorithms (testSet [testNR 10 20]) { lo := 5, hi := 9 } := by native_decide
+example : sameAcrossAlgorithms (testSet [testNR 10 20]) { lo := 21, hi := 25 } := by native_decide
+
+private def elenCachedLengthCorrect (s : RangeSetBlaze) (r : IntRange) : Bool :=
+  (internalAddELen s s.cardinality r).cachedLength ==
+    (internalAddELen s s.cardinality r).setResult.cardinality
+
+private def elenMatchesAlgoE (s : RangeSetBlaze) (r : IntRange) : Bool :=
+  (internalAddELen s s.cardinality r).setResult.ranges == (internalAddE s r).ranges
+
+example : elenCachedLengthCorrect (testSet []) { lo := 5, hi := 7 } := by native_decide
+example : elenCachedLengthCorrect (testSet [testNR 10 12]) { lo := 20, hi := 22 } := by native_decide
+example : elenCachedLengthCorrect (testSet [testNR 10 30]) { lo := 15, hi := 20 } := by native_decide
+example : elenCachedLengthCorrect (testSet [testNR 10 12]) { lo := 5, hi := 20 } := by native_decide
+example : elenCachedLengthCorrect (testSet [testNR 10 20]) { lo := 5, hi := 12 } := by native_decide
+example : elenCachedLengthCorrect (testSet [testNR 10 20]) { lo := 5, hi := 9 } := by native_decide
+example : elenCachedLengthCorrect
+    (testSet [testNR 10 12, testNR 14 16, testNR 18 20, testNR 30 35]) { lo := 7, hi := 18 } := by
+  native_decide
+
+example : elenMatchesAlgoE (testSet []) { lo := 5, hi := 7 } := by native_decide
+example : elenMatchesAlgoE
+    (testSet [testNR 10 12, testNR 14 16, testNR 18 20, testNR 30 35]) { lo := 7, hi := 18 } := by
+  native_decide
 
 end RangeSetBlaze

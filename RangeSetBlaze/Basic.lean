@@ -494,6 +494,16 @@ lemma before_trans {Value : Type*} {a b c : Run Value}
   intro hvalue
   simpa only [IntRange.NR.before] using hgap
 
+/-- When a value type has at most one value, every pair of runs is equal-valued,
+so canonical run order coincides exactly with canonical range order: there is
+no touching-but-distinct-value case left to admit. -/
+lemma before_iff_range_before {Value : Type*} [Subsingleton Value] {a b : Run Value} :
+    before a b ↔ a.range ≺ b.range := by
+  refine ⟨fun h => h.2 (Subsingleton.elim _ _), fun h => ⟨?_, fun _ => h⟩⟩
+  have hgap : a.range.val.hi + 1 < b.range.val.lo := h
+  unfold disjointBefore
+  omega
+
 end Run
 
 /-- The number of scalar keys represented by a list of runs. For canonical
@@ -518,6 +528,15 @@ def runsCardinality {Value : Type*} (runs : List (Run Value)) : Nat :=
 later run. -/
 abbrev Canonical {Value : Type*} (runs : List (Run Value)) : Prop :=
   List.Pairwise Run.before runs
+
+/-- For a value type with at most one value, a run list is canonical exactly
+when its underlying range list is canonical: `Run.before_iff_range_before`
+identifies the two order relations pointwise. -/
+theorem canonical_iff_range_canonical {Value : Type*} [Subsingleton Value]
+    (runs : List (Run Value)) :
+    Canonical runs ↔ List.Pairwise (· ≺ ·) (runs.map Run.range) := by
+  rw [List.pairwise_map]
+  exact List.Pairwise.iff (fun _ _ => Run.before_iff_range_before)
 
 /-- Interpret a raw run list using executable first-match semantics. -/
 def runsToFunction {Value : Type*} : List (Run Value) → Int → Option Value
@@ -558,6 +577,16 @@ lemma runsToFunction_append {Value : Type*}
       simp only [List.cons_append, runsToFunction_cons, ih]
       split <;> simp
 
+/-- A run list's defined keys are exactly the union of its runs' ranges. -/
+lemma runsToFunction_ne_none_iff {Value : Type*} (runs : List (Run Value)) (key : Int) :
+    runsToFunction runs key ≠ none ↔ key ∈ RangeSetBlaze.rangesToSet (runs.map Run.range) := by
+  induction runs with
+  | nil => simp
+  | cons run rest ih =>
+      simp only [runsToFunction_cons, List.map_cons, RangeSetBlaze.rangesToSet_cons,
+        Set.mem_union, IntRange.mem_toSet_iff]
+      split <;> simp_all
+
 /-- Pointwise overwrite by an inclusive integer input range. -/
 def overwrite {Value : Type*}
     (old : Int → Option Value) (range : IntRange) (value : Value)
@@ -590,6 +619,16 @@ lemma overwrite_eq_of_hi_lt_lo {Value : Type*}
   rw [IntRange.mem_toSet_iff] at hcontains
   exact (not_le_of_gt h) (hcontains.1.trans hcontains.2)
 
+/-- Overwriting extends the defined keys by exactly the input range: a key is
+defined afterward iff it was defined before or lies in the newly written
+range. -/
+lemma overwrite_ne_none_iff {Value : Type*}
+    (old : Int → Option Value) (range : IntRange) (value : Value) (key : Int) :
+    overwrite old range value key ≠ none ↔ old key ≠ none ∨ key ∈ range.toSet := by
+  by_cases h : key ∈ range.toSet
+  · simp [h]
+  · simp [h]
+
 end RangeMapBlaze
 
 /-- A range map represented by canonical, nonempty, labeled integer runs. -/
@@ -610,6 +649,12 @@ def support {Value : Type*} (map : RangeMapBlaze Value) : Set Int :=
 /-- The mathematical number of scalar keys represented by a range map. -/
 def cardinality {Value : Type*} (map : RangeMapBlaze Value) : Nat :=
   runsCardinality map.runs
+
+/-- A range map's support is exactly the set represented by its runs' ranges. -/
+theorem support_eq_rangesToSet {Value : Type*} (map : RangeMapBlaze Value) :
+    map.support = RangeSetBlaze.rangesToSet (map.runs.map Run.range) := by
+  ext key
+  exact runsToFunction_ne_none_iff map.runs key
 
 section Examples
 
