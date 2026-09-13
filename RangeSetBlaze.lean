@@ -8,6 +8,7 @@ import RangeSetBlaze.AlgoC
 import RangeSetBlaze.AlgoD
 import RangeSetBlaze.AlgoDMap
 import RangeSetBlaze.CrossAlgorithm
+import RangeSetBlaze.Query
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
