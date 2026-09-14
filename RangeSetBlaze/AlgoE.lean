@@ -22,9 +22,7 @@ def internalAddE (s : RangeSetBlaze) (input : IntRange) : RangeSetBlaze :=
 /-- Algo E represents exactly the union of the old set and the input interval. -/
 theorem internalAddE_toSet (s : RangeSetBlaze) (input : IntRange) :
     (internalAddE s input).toSet = s.toSet ∪ input.toSet := by
-  have hsupport : s.toUnitMap.support = s.toSet := by
-    rw [← toRangeSet_toSet, toRangeSet_toUnitMap]
-  rw [internalAddE, toRangeSet_toSet, ← hsupport]
+  rw [internalAddE, toRangeSet_toSet, ← toUnitMap_support]
   ext key
   by_cases h : key ∈ input.toSet <;> simp [support, internalAddCMap_toFunction, h]
 
@@ -56,12 +54,5 @@ theorem internalAddELen_cachedLength
   simp only [internalAddELen, toRangeSet_cardinality]
   exact internalAddCMapLen_cachedLength s.toUnitMap cachedLength input ()
     (by rw [hlength, ← toRangeSet_cardinality, toRangeSet_toUnitMap])
-
-/-- ELen inherits Algo E's set semantics. -/
-theorem internalAddELen_toSet
-    (s : RangeSetBlaze) (cachedLength : Nat) (input : IntRange) :
-    (internalAddELen s cachedLength input).setResult.toSet = s.toSet ∪ input.toSet := by
-  rw [internalAddELen_setResult]
-  exact internalAddE_toSet s input
 
 end RangeSetBlaze

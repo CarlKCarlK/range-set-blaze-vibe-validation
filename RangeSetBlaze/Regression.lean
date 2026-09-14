@@ -33,16 +33,17 @@ private def sameAcrossAlgorithms (s : RangeSetBlaze) (r : IntRange) : Bool :=
   (internalAddC s r).ranges == (internalAddD s r).ranges &&
   (internalAddD s r).ranges == (internalAddE s r).ranges
 
-/-- Starting from the true cardinality, ELen must reproduce Algo E, agree with
-CLen's cached count, and cache exactly the result cardinality. -/
-private def sameCachedLength (s : RangeSetBlaze) (r : IntRange) : Bool :=
+/-- Every implementation must agree, while ELen must also match the explicit
+canonical ranges and cardinality, CLen's count, and its own result cardinality. -/
+private def agrees (s : RangeSetBlaze) (r : IntRange)
+    (expectedRanges : List NR) (expectedLength : Nat) : Bool :=
   let eLen := internalAddELen s s.cardinality r
-  eLen.setResult.ranges == (internalAddE s r).ranges &&
-  eLen.cachedLength == (internalAddCLen s s.cardinality r).cachedLength &&
-  eLen.cachedLength == eLen.setResult.cardinality
-
-private def agrees (s : RangeSetBlaze) (r : IntRange) : Bool :=
-  sameAcrossAlgorithms s r && sameCachedLength s r
+  sameAcrossAlgorithms s r &&
+    eLen.setResult.ranges == expectedRanges &&
+    eLen.setResult.ranges == (internalAddE s r).ranges &&
+    eLen.cachedLength == expectedLength &&
+    eLen.cachedLength == (internalAddCLen s s.cardinality r).cachedLength &&
+    eLen.cachedLength == eLen.setResult.cardinality
 
 example : (internalAddD (testSet [testNR 10 30]) { lo := 10, hi := 20 }).ranges =
     [testNR 10 30] := by native_decide
@@ -56,21 +57,39 @@ example : (internalAddD
 example : (internalAddD (testSet [testNR 10 12, testNR 20 22])
     { lo := 11, hi := 15 }).ranges = [testNR 10 15, testNR 20 22] := by native_decide
 
-example : agrees (testSet [testNR 10 12]) { lo := 5, hi := 4 } := by native_decide
-example : agrees (testSet []) { lo := 5, hi := 7 } := by native_decide
-example : agrees (testSet [testNR 10 12]) { lo := 1, hi := 3 } := by native_decide
-example : agrees (testSet [testNR 10 12]) { lo := 20, hi := 22 } := by native_decide
-example : agrees (testSet [testNR 1 5, testNR 10 20]) { lo := 12, hi := 15 } := by native_decide
-example : agrees (testSet [testNR 10 20, testNR 30 35]) { lo := 10, hi := 15 } := by native_decide
-example : agrees (testSet [testNR 1 3, testNR 10 12]) { lo := 5, hi := 7 } := by native_decide
-example : agrees (testSet [testNR 10 12, testNR 20 22]) { lo := 7, hi := 9 } := by native_decide
-example : agrees (testSet [testNR 10 12, testNR 14 16, testNR 18 20, testNR 30 35]) { lo := 7, hi := 18 } := by native_decide
-example : agrees (testSet [testNR 1 5, testNR 10 12]) { lo := 4, hi := 7 } := by native_decide
-example : agrees (testSet [testNR 1 5, testNR 8 10, testNR 20 22]) { lo := 4, hi := 7 } := by native_decide
-example : agrees (testSet [testNR 1 5, testNR 8 10, testNR 13 15, testNR 30 35]) { lo := 4, hi := 13 } := by native_decide
-example : agrees (testSet [testNR 10 12]) { lo := 10, hi := 12 } := by native_decide
-example : agrees (testSet [testNR 10 12]) { lo := 13, hi := 15 } := by native_decide
-example : agrees (testSet [testNR 10 12, testNR 20 22]) { lo := 5, hi := 30 } := by native_decide
-example : agrees (testSet [testNR 10 12, testNR 16 18]) { lo := 13, hi := 15 } := by native_decide
+example : agrees (testSet [testNR 10 12]) { lo := 5, hi := 4 }
+    [testNR 10 12] 3 := by native_decide
+example : agrees (testSet []) { lo := 5, hi := 7 }
+    [testNR 5 7] 3 := by native_decide
+example : agrees (testSet [testNR 10 12]) { lo := 1, hi := 3 }
+    [testNR 1 3, testNR 10 12] 6 := by native_decide
+example : agrees (testSet [testNR 10 12]) { lo := 20, hi := 22 }
+    [testNR 10 12, testNR 20 22] 6 := by native_decide
+example : agrees (testSet [testNR 1 5, testNR 10 20]) { lo := 12, hi := 15 }
+    [testNR 1 5, testNR 10 20] 16 := by native_decide
+example : agrees (testSet [testNR 10 20, testNR 30 35]) { lo := 10, hi := 15 }
+    [testNR 10 20, testNR 30 35] 17 := by native_decide
+example : agrees (testSet [testNR 1 3, testNR 10 12]) { lo := 5, hi := 7 }
+    [testNR 1 3, testNR 5 7, testNR 10 12] 9 := by native_decide
+example : agrees (testSet [testNR 10 12, testNR 20 22]) { lo := 7, hi := 9 }
+    [testNR 7 12, testNR 20 22] 9 := by native_decide
+example : agrees
+    (testSet [testNR 10 12, testNR 14 16, testNR 18 20, testNR 30 35])
+    { lo := 7, hi := 18 } [testNR 7 20, testNR 30 35] 20 := by native_decide
+example : agrees (testSet [testNR 1 5, testNR 10 12]) { lo := 4, hi := 7 }
+    [testNR 1 7, testNR 10 12] 10 := by native_decide
+example : agrees (testSet [testNR 1 5, testNR 8 10, testNR 20 22]) { lo := 4, hi := 7 }
+    [testNR 1 10, testNR 20 22] 13 := by native_decide
+example : agrees
+    (testSet [testNR 1 5, testNR 8 10, testNR 13 15, testNR 30 35])
+    { lo := 4, hi := 13 } [testNR 1 15, testNR 30 35] 21 := by native_decide
+example : agrees (testSet [testNR 10 12]) { lo := 10, hi := 12 }
+    [testNR 10 12] 3 := by native_decide
+example : agrees (testSet [testNR 10 12]) { lo := 13, hi := 15 }
+    [testNR 10 15] 6 := by native_decide
+example : agrees (testSet [testNR 10 12, testNR 20 22]) { lo := 5, hi := 30 }
+    [testNR 5 30] 26 := by native_decide
+example : agrees (testSet [testNR 10 12, testNR 16 18]) { lo := 13, hi := 15 }
+    [testNR 10 18] 9 := by native_decide
 
 end RangeSetBlaze

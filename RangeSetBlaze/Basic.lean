@@ -716,3 +716,11 @@ lemma toRangeSet_cardinality (map : RangeMapBlaze Unit) :
   rfl
 
 end RangeMapBlaze
+
+namespace RangeSetBlaze
+
+/-- Viewing a range set as a `Unit`-valued map preserves its represented keys. -/
+lemma toUnitMap_support (set : RangeSetBlaze) : set.toUnitMap.support = set.toSet := by
+  rw [← RangeMapBlaze.toRangeSet_toSet, RangeMapBlaze.toRangeSet_toUnitMap]
+
+end RangeSetBlaze
