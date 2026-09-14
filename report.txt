@@ -1,0 +1,28 @@
+Implemented AlgoE and AlgoELen end-to-end in the isolated workspace.
+- [AlgoE.lean](/home/carlk/programs/exp1/sol-clean/range-set-blaze-lean2/RangeSetBlaze/AlgoE.lean) converts range sets to RangeMapBlaze Unit, delegates to DMap/DMapLen, then erases values.
+- internalAddELen_correct jointly proves exact AlgoE representation and cached cardinality.
+- internalAddE_toSet proves set-union semantics.
+- Added shared Unit-map bridges for canonicality, membership, round-trip conversion, and cardinality.
+- Added internalAddE_eq_internalAddA to [CrossAlgorithm.lean](/home/carlk/programs/exp1/sol-clean/range-set-blaze-lean2/RangeSetBlaze/CrossAlgorithm.lean).
+- Exported AlgoE/AlgoELen through [RangeSetBlaze.lean](/home/carlk/programs/exp1/sol-clean/range-set-blaze-lean2/RangeSetBlaze.lean).
+- Added 11 focused AlgoELen cardinality/representation tests and extended 12 cross-algorithm tests in [Regression.lean](/home/carlk/programs/exp1/sol-clean/range-set-blaze-lean2/RangeSetBlaze/Regression.lean).
+- Cleanup removed the temporary unitRun wrapper; no existing Len proof or arithmetic was duplicated or refactored.
+Metrics:
+Scope	Physical LOC	Active LOC	Comment LOC
+Repository before	9,077	8,012	576
+Repository after	9,248	8,140	598
+AlgoE module	129	91	20
+
+
+The repository gained 5 definitions, 6 lemmas/theorems, and 2 private proof helpers.
+Validation passed:
+- lake build
+- Direct compilation of AlgoC, DMap, AlgoE, CrossAlgorithm, Regression, and umbrella modules
+- All 6 metrics-collector tests
+- All native regression examples
+- git diff --check
+- No sorry, admit, axiom, sorryAx, unsafe, or implemented_by
+- Zero warnings
+All three public AlgoE theorem checks depend only on [propext, Classical.choice, Quot.sound].
+No commit was created. Suggested commit message:
+Implement Unit-map AlgoE insertion with cached length

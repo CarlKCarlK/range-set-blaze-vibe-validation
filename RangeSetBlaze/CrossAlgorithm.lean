@@ -3,6 +3,7 @@ import RangeSetBlaze.AlgoA
 import RangeSetBlaze.AlgoB
 import RangeSetBlaze.AlgoC
 import RangeSetBlaze.AlgoD
+import RangeSetBlaze.AlgoE
 import RangeSetBlaze.AlgoAMap
 import RangeSetBlaze.AlgoCMap
 import RangeSetBlaze.AlgoDMap
@@ -28,6 +29,12 @@ theorem internalAddD_eq_internalAddA (set : RangeSetBlaze) (input : IntRange) :
     internalAddD set input = internalAddA set input := by
   apply RangeSetBlaze.ext
   rw [internalAddD_toSet, internalAddA_toSet]
+
+/-- Algo E's Unit-map delegation produces the canonical reference result. -/
+theorem internalAddE_eq_internalAddA (set : RangeSetBlaze) (input : IntRange) :
+    internalAddE set input = internalAddA set input := by
+  apply RangeSetBlaze.ext
+  rw [internalAddE_toSet, internalAddA_toSet]
 
 end RangeSetBlaze
 
