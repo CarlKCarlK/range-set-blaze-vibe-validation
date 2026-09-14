@@ -1,12 +1,75 @@
-Implemented AlgoE/AlgoELen via Unit-valued CMap/CMapLen.
-- Added [AlgoE.lean](/home/carlk/programs/range-set-blaze-lean2/RangeSetBlaze/AlgoE.lean)
-- Integrated exports in [RangeSetBlaze.lean](/home/carlk/programs/range-set-blaze-lean2/RangeSetBlaze.lean)
-- Added evaluation scenarios and cached-length checks in [Main.lean](/home/carlk/programs/range-set-blaze-lean2/Main.lean)
-- Reused internalAddCMapLen_cachedLength; no fresh insertion arithmetic proof.
-- Added Unit-map support/set and cardinality bridge lemmas.
-- lake build passes with zero warnings.
-- Direct AlgoE compilation passes.
-- git diff --check passes.
-- Axiom inventory: [propext, Classical.choice, Quot.sound].
-- Native tests produce expected merge results and cardinality 8.
-No commit created. Suggested commit message: Implement AlgoELen via Unit-valued CMapLen
+AlgoE / AlgoELen completion report
+
+Implementation
+--------------
+
+- `RangeSetBlaze/AlgoE.lean` defines `internalAddE` by converting a
+  `RangeSetBlaze` to a canonical `Unit`-valued `RangeMapBlaze`, calling
+  `internalAddCMap`, and erasing the values.
+- `internalAddELen` uses the same conversion with `internalAddCMapLen` and
+  preserves the returned `Nat` cache.
+- `RangeSetBlaze.lean` imports and exports both APIs.
+
+Proof architecture
+------------------
+
+The cached-length proof reuses `internalAddCMapLen_cachedLength`; no map
+insertion arithmetic was duplicated. The main public results are:
+
+- `internalAddE_toSet`
+- `internalAddELen_setResult`
+- `internalAddELen_cachedLength`
+- `internalAddELen_toSet`
+
+The stable shared bridge moved to `Basic.lean`:
+`RangeMapBlaze.support_eq_rangesToSet`, stating that a run list's support is
+the union of its carried intervals, without requiring canonicality.
+
+Cleanup and API review
+----------------------
+
+- Removed the unused set-conversion helper and the duplicate private support
+  theorem from AlgoE.
+- Kept conversion constructors and cache bookkeeping private.
+- No unrelated Len or algorithm refactor was performed.
+- The proof sketch is: Unit-specialize CMap; erase values; use the CMapLen
+  cache theorem; identify map support with the erased set.
+
+Tests
+-----
+
+`Main.lean` evaluates empty, before, after, overlap, touching, and bridge
+insertions through AlgoE, and evaluates an AlgoELen cached result. It also
+checks `internalAddELen_cachedLength` on the bridge scenario. The observed
+bridge result has represented count `8`.
+
+Validation
+----------
+
+- `lake build`: passed, zero warnings.
+- `lake env lean RangeSetBlaze/AlgoE.lean`: passed.
+- `cargo test` in `rust-tests`: passed: 14 executable tests and 23 doctests
+  passed; 2 doctests were intentionally ignored.
+- `git diff --check`: passed.
+- No `sorry`, `admit`, source `axiom`, `unsafe`, or `implemented_by` matches
+  in the checked Lean sources.
+- Public AlgoELen theorem axioms:
+  `[propext, Classical.choice, Quot.sound]`.
+
+Metrics (collector/schema v3)
+-----------------------------
+
+Compared with `abf7fa5^`:
+
+| File | Physical LOC before | Physical LOC after | Active LOC before | Active LOC after |
+|---|---:|---:|---:|---:|
+| `Basic.lean` | 660 | 682 | 454 | 471 |
+| `Main.lean` | 95 | 113 | 76 | 93 |
+| `RangeSetBlaze.lean` | 17 | 18 | 14 | 15 |
+| `AlgoE.lean` | absent | 116 | absent | 90 |
+
+The increases are the new implementation, shared bridge theorem, and focused
+evaluation coverage; no claim of proof compression is made.
+
+No new commit was created during this continuation. The existing branch
+already contains commit `abf7fa5` from the earlier pass.

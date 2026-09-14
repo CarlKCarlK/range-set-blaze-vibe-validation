@@ -29,12 +29,6 @@ private lemma asUnitMap_ranges (s : RangeSetBlaze) :
     (asUnitMap s).runs.map Run.range = s.ranges := by
   simp [asUnitMap, List.map_map, Function.comp_def]
 
-private lemma unitMap_toSet (s : RangeSetBlaze) :
-    (fromUnitMap (asUnitMap s)).toSet = s.toSet := by
-  change RangeSetBlaze.rangesToSet ((asUnitMap s).runs.map Run.range) = _
-  rw [asUnitMap_ranges]
-  rfl
-
 private lemma unitMap_cardinality (map : RangeMapBlaze Unit) :
     map.cardinality = (fromUnitMap map).cardinality := by
   change (map.runs.map (fun run => run.range.val.cardinality)).sum =
@@ -43,29 +37,12 @@ private lemma unitMap_cardinality (map : RangeMapBlaze Unit) :
   | nil => rfl
   | cons run rest ih => simp [ih]
 
-private lemma support_eq_rangesToSet {Value : Type*}
-    (runs : List (Run Value)) :
-    {key | runsToFunction runs key ≠ none} =
-      RangeSetBlaze.rangesToSet (runs.map Run.range) := by
-  induction runs with
-  | nil => simp [RangeMapBlaze.runsToFunction]
-  | cons run rest ih =>
-      ext key
-      simp only [List.map_cons, RangeSetBlaze.rangesToSet_cons,
-        RangeMapBlaze.runsToFunction_cons, Set.mem_ofPred_eq, Set.mem_union]
-      by_cases h : run.range.val.lo ≤ key ∧ key ≤ run.range.val.hi
-      · simp [h]
-      · have hi : runsToFunction rest key ≠ none ↔
-            key ∈ RangeSetBlaze.rangesToSet (rest.map Run.range) := by
-          simpa using congrArg (fun set : Set Int => key ∈ set) ih
-        simp [h]
-        exact hi
-
 private lemma asUnitMap_support (s : RangeSetBlaze) :
     (asUnitMap s).support = s.toSet := by
   ext key
   change key ∈ {key | runsToFunction (asUnitMap s).runs key ≠ none} ↔ _
-  have h := Set.ext_iff.mp (support_eq_rangesToSet (asUnitMap s).runs) key
+  have h := Set.ext_iff.mp (RangeMapBlaze.support_eq_rangesToSet
+    (asUnitMap s).runs) key
   rw [asUnitMap_ranges] at h
   exact h
 
@@ -79,7 +56,8 @@ private lemma unitMap_overwrite_set
     change key ∈ RangeSetBlaze.rangesToSet
       ((internalAddCMap map input ()).runs.map Run.range) ↔ _
     simpa [RangeMapBlaze.support, RangeMapBlaze.toFunction] using
-      (Set.ext_iff.mp (support_eq_rangesToSet (internalAddCMap map input ()).runs) key).symm
+      (Set.ext_iff.mp (RangeMapBlaze.support_eq_rangesToSet
+        (internalAddCMap map input ()).runs) key).symm
   rw [hset]
   ext key
   have hfunction := congrFun (internalAddCMap_toFunction map input ()) key

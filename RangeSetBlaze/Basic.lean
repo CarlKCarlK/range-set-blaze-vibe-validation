@@ -607,6 +607,28 @@ def toFunction {Value : Type*} (map : RangeMapBlaze Value) : Int → Option Valu
 def support {Value : Type*} (map : RangeMapBlaze Value) : Set Int :=
   { key | map.toFunction key ≠ none }
 
+/-- The support of a run list is the union of the intervals it carries.
+
+This does not require canonicality: first-match lookup is absent exactly when
+every run misses the key. -/
+lemma support_eq_rangesToSet {Value : Type*}
+    (runs : List (Run Value)) :
+    {key | runsToFunction runs key ≠ none} =
+      RangeSetBlaze.rangesToSet (runs.map Run.range) := by
+  induction runs with
+  | nil => simp [runsToFunction]
+  | cons run rest ih =>
+      ext key
+      simp only [List.map_cons, RangeSetBlaze.rangesToSet_cons,
+        runsToFunction_cons, Set.mem_ofPred_eq, Set.mem_union]
+      by_cases h : run.range.val.lo ≤ key ∧ key ≤ run.range.val.hi
+      · simp [h]
+      · have hi : runsToFunction rest key ≠ none ↔
+            key ∈ RangeSetBlaze.rangesToSet (rest.map Run.range) := by
+          simpa using congrArg (fun set : Set Int => key ∈ set) ih
+        simp [h]
+        exact hi
+
 /-- The mathematical number of scalar keys represented by a range map. -/
 def cardinality {Value : Type*} (map : RangeMapBlaze Value) : Nat :=
   runsCardinality map.runs
