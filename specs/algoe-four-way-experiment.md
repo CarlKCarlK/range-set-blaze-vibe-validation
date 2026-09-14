@@ -49,7 +49,7 @@ All four candidates passed the basic integrity checks:
 | Luna | PASS | PASS | clean | PASS |
 | Sol | PASS | PASS | clean | PASS |
 
-`Regression.lean` is not currently reachable from the normal `lake build` graph, so it was also compiled directly with:
+At the time of the experiment, `Regression.lean` was not reachable from the normal `lake build` graph, so it was also compiled directly with:
 
 ```text
 lake env lean RangeSetBlaze/Regression.lean
@@ -168,7 +168,9 @@ The blind review found that `RangeSetBlaze/Regression.lean` is not part of the n
 
 The regression files were subsequently compiled directly for all four candidates, and all four passed.
 
-This suggests a separate repository improvement: make `Regression.lean` part of a build/test target so regression examples are automatically checked by the normal validation workflow.
+This was subsequently resolved with a dedicated Lake library test driver rooted
+at `RangeSetBlaze.Regression`. The normal production build remains `lake build`;
+developers and CI run the compile-time regression checks with `lake test`.
 
 ## Shared reporting gap
 
