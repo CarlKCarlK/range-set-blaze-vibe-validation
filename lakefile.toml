@@ -1,4 +1,4 @@
-name = "range-set-blaze-lean2"
+name = "range-set-blaze-vibe-validation"
 version = "0.1.0"
 keywords = ["math"]
 defaultTargets = ["rangesetblaze"]
