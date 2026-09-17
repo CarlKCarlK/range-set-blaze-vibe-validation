@@ -9,9 +9,9 @@ Kadie](https://medium.com/@carlmkadie), tentatively titled "Nine Rules for
 Vibe Validation of Vibe-Coded Algorithms: Using AI-Written Lean to Validate
 AI-Written Rust."
 
-It is a new proof experiment based on the earlier `range-set-blaze-lean` and
-`range-set-blaze-lean2` work. Those repositories remain unchanged as the
-reproducible artifacts associated with their own articles.
+It is a new proof experiment based on the earlier `range-set-blaze-lean`
+work. That repository remains unchanged as the reproducible artifact
+associated with its own article.
 
 This project validates production RangeSetBlaze insertion algorithms,
 including new cursor-based algorithms, in Lean. Its goals are to keep the
