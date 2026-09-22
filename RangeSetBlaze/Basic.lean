@@ -261,13 +261,8 @@ to establish symmetric mergeability. -/
 lemma mergeable_of_startsBefore_of_not_before {a b : NR}
     (horder : startsBefore a b) (hnot : ¬ a ≺ b) :
     mergeable a b := by
-  refine ⟨hnot, ?_⟩
-  intro hba
-  unfold startsBefore at horder
-  unfold before at hba
-  have hb := b.property
-  change b.val.lo ≤ b.val.hi at hb
-  linarith
+  grind only [mergeable, startsBefore, before, IntRange.nonempty,
+    Subtype.property]
 
 /-- 3-way discriminator: `a` is left of `b`, `b` is left of `a`, or they are mergeable. -/
 inductive Rel3 (a b : NR) : Type where
