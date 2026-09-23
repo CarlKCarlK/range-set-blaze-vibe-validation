@@ -10,9 +10,10 @@ import RangeSetBlaze.AlgoDMap
 import RangeSetBlaze.AlgoE
 import RangeSetBlaze.CrossAlgorithm
 import RangeSetBlaze.Query
+import RangeSetBlaze.PyIntRangeSet
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
 export RangeSetBlaze (toSet internalAddA internalAddB internalAddC internalAddCLen internalAddD
-  internalAddDLen internalAddE internalAddELen)
+  internalAddDLen internalAddE internalAddELen internalAddPy)
 export RangeMapBlaze (internalAddAMap internalAddCMap internalAddDMap)

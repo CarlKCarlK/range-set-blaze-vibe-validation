@@ -53,8 +53,10 @@ private def fromNRs (xs : List NR)
   { ranges := xs, canonical := hcanonical }
 
 /-- Scan forward from `current`, merging touching or overlapping pending ranges
-and stopping at the first range separated by a true gap. -/
-private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (List NR) :=
+and stopping at the first range separated by a true gap. This scan is public
+because PySnpTools `IntRangeSet._internal_add` uses the same merge loop; see
+`RangeSetBlaze/PyIntRangeSet.lean`. -/
+def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (List NR) :=
   match pending with
   | [] => (current, [])
   | next :: pendingTail =>
@@ -122,7 +124,7 @@ open IntRange
 /-- One semantic contract for the scan: it preserves the represented union,
 keeps every output lower endpoint at or after the scan start, and preserves
 ordering whenever the pending input is ordered. -/
-private lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
+lemma deleteExtraNRs_loop_preserves_order_lower_bound_and_union
     (start : Int) (current : NR) (pending : List NR)
     (hlo : current.val.lo = start)
     (hge : ∀ nr ∈ pending, start ≤ nr.val.lo) :

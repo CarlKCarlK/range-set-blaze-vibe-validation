@@ -242,22 +242,6 @@ private theorem gap_queryResultSpec
   intro x hlo hhi
   exact (queryState_eq_false_iff set _).mpr (hempty x hlo hhi)
 
-private theorem strictSplit_spec
-    (ranges : List IntRange.NR) (key : Int)
-    (hcanonical : List.Pairwise IntRange.NR.before ranges) :
-    let split := List.span (fun range => decide (range.val.lo < key)) ranges
-    ranges = split.fst ++ split.snd ∧
-      (∀ range ∈ split.fst, range.val.lo < key) ∧
-      (∀ range ∈ split.snd, key ≤ range.val.lo) := by
-  dsimp
-  simp only [List.span_eq_takeWhile_dropWhile]
-  refine ⟨(List.takeWhile_append_dropWhile).symm, ?_, ?_⟩
-  · intro range hmem
-    exact of_decide_eq_true (List.mem_takeWhile_imp
-      (p := fun candidate : IntRange.NR => decide (candidate.val.lo < key)) hmem)
-  · simpa [List.span_eq_takeWhile_dropWhile] using
-      IntRange.NR.strict_start_split_suffix_lower_bound ranges key hcanonical
-
 private theorem nonstrictSplit_spec
     (ranges : List IntRange.NR) (key : Int)
     (hcanonical : List.Pairwise IntRange.NR.before ranges) :
@@ -454,7 +438,7 @@ theorem rangeOrGapAtCursor_correct
       (rangeOrGapAtCursor set lower upper key) := by
   let gap := List.span (fun range : IntRange.NR => decide (range.val.lo < key))
     set.ranges
-  have hsplit := strictSplit_spec set.ranges key set.canonical
+  have hsplit := IntRange.NR.strict_start_split_spec set.ranges key set.canonical
   change set.ranges = gap.fst ++ gap.snd ∧
       (∀ range ∈ gap.fst, range.val.lo < key) ∧
       (∀ range ∈ gap.snd, key ≤ range.val.lo) at hsplit

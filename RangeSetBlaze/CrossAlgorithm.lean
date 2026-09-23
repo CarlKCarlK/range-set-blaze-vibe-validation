@@ -7,6 +7,7 @@ import RangeSetBlaze.AlgoAMap
 import RangeSetBlaze.AlgoCMap
 import RangeSetBlaze.AlgoDMap
 import RangeSetBlaze.AlgoE
+import RangeSetBlaze.PyIntRangeSet
 
 namespace RangeSetBlaze
 
@@ -36,6 +37,19 @@ theorem internalAddE_eq_internalAddA (set : RangeSetBlaze) (input : IntRange) :
     internalAddE set input = internalAddA set input := by
   apply RangeSetBlaze.ext
   rw [internalAddE_toSet, internalAddA_toSet]
+
+/-- PySnpTools-shaped `internalAddPy` produces the same canonical
+representation as reference Algo A given the inclusive form
+`[start, start + length - 1]` of Python's half-open input. -/
+theorem internalAddPy_eq_internalAddA (set : RangeSetBlaze) (start length : Int)
+    (hlength : 0 < length) :
+    internalAddPy set start length hlength =
+      internalAddA set { lo := start, hi := start + length - 1 } := by
+  apply RangeSetBlaze.ext
+  -- The inclusive input is definitionally Python's stored range `[start, start + length)`.
+  rw [internalAddPy_toSet, internalAddA_toSet,
+    ← IntRange.NR.ofStartStop_toSet start (start + length) (by omega)]
+  rfl
 
 end RangeSetBlaze
 

@@ -227,6 +227,24 @@ lemma strict_start_split_suffix_lower_bound
         · exact le_trans (not_lt.mp hfirst)
             (before_lo_lt (List.rel_of_pairwise_cons hpw hmem)).le
 
+/-- A strict lower-endpoint split is a lower-bound search on a canonical list:
+it reconstructs the list, every prefix range starts strictly before `start`,
+and every suffix range starts at or after it.  This is the list form of
+`bisect_left` on sorted starts and of a cursor's lower-bound gap. -/
+lemma strict_start_split_spec
+    (ranges : List NR) (start : Int)
+    (hpw : List.Pairwise before ranges) :
+    let split := List.span (fun candidate => decide (candidate.val.lo < start)) ranges
+    ranges = split.fst ++ split.snd ∧
+      (∀ nr ∈ split.fst, nr.val.lo < start) ∧
+      (∀ nr ∈ split.snd, start ≤ nr.val.lo) := by
+  refine ⟨?_, ?_, strict_start_split_suffix_lower_bound ranges start hpw⟩
+  · rw [List.span_eq_takeWhile_dropWhile]
+    exact List.takeWhile_append_dropWhile.symm
+  · intro nr hmem
+    rw [List.span_eq_takeWhile_dropWhile] at hmem
+    simpa using List.mem_takeWhile_imp hmem
+
 /-- Gap-separated ranges have disjoint set representations. -/
 lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
     a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by

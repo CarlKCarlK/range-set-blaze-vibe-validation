@@ -127,18 +127,8 @@ private theorem lowerBoundGap_spec
     let gap := lowerBoundGap start ranges
     ranges = gap.left ++ gap.right ∧
       (∀ nr ∈ gap.left, nr.val.lo < start) ∧
-      (∀ nr ∈ gap.right, start ≤ nr.val.lo) := by
-  dsimp [lowerBoundGap]
-  rw [List.span_eq_takeWhile_dropWhile]
-  change ranges = List.takeWhile _ ranges ++ List.dropWhile _ ranges ∧
-    (∀ nr ∈ List.takeWhile _ ranges, nr.val.lo < start) ∧
-    (∀ nr ∈ List.dropWhile _ ranges, start ≤ nr.val.lo)
-  refine ⟨List.takeWhile_append_dropWhile.symm, ?_, ?_⟩
-  · intro nr hmem
-    have hsatisfies := List.mem_takeWhile_imp hmem
-    simpa using hsatisfies
-  · simpa [List.span_eq_takeWhile_dropWhile] using
-      NR.strict_start_split_suffix_lower_bound ranges start hpw
+      (∀ nr ∈ gap.right, start ≤ nr.val.lo) :=
+  NR.strict_start_split_spec ranges start hpw
 
 /-- The forward cursor walk preserves canonical order, the accumulator's
 lower-bound interface, and the exact union in one semantic contract. -/

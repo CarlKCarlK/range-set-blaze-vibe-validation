@@ -20,7 +20,8 @@ The repository includes proofs and supporting tests for several RangeSetBlaze an
 - production and cursor-based range-map insertion;
 - cached-length updates for the insertion algorithms;
 - uniqueness of canonical range-set and range-map representations; and
-- baseline and cursor-based `range_or_gap_at` operations.
+- baseline and cursor-based `range_or_gap_at` operations; and
+- insertion in the older Python predecessor, PySnpTools `IntRangeSet._internal_add` (`RangeSetBlaze/PyIntRangeSet.lean`), whose merge loop is proved identical to the production RangeSetBlaze scan.
 
 The project also includes a small formalization of the subset of `BTreeMap` semantics used by these algorithms. Rust comparison tests check that a simple sorted-`Vec` implementation and the real `BTreeMap` implementation have the same observable behavior for that interface.
 
@@ -46,6 +47,8 @@ lake test
 ```
 
 `lake test` builds `RangeSetBlaze/Regression.lean`, whose examples use `native_decide` to check concrete scenarios across the algorithms.
+
+The Python differential cases in `RangeSetBlaze/PyIntRangeSetCases.lean` are generated from the real PySnpTools implementation by `scripts/generate_py_intrangeset_cases.py`.
 
 The proof project is intended to build without `sorry` placeholders or new axioms introduced to bypass the proofs.
 
