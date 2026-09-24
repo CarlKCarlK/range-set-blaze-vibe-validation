@@ -11,6 +11,7 @@ import RangeSetBlaze.AlgoE
 import RangeSetBlaze.CrossAlgorithm
 import RangeSetBlaze.Query
 import RangeSetBlaze.PyIntRangeSet
+import RangeSetBlaze.PyIntRangeSetState
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)

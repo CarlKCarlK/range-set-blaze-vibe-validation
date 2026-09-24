@@ -19,9 +19,13 @@ stores that list directly as a canonical `RangeSetBlaze`: the Python range
 `_start_items[i]` is `ranges[i].val.lo`, and `_start_to_length` maps it to
 `NR.length ranges[i]`.  Python's invariant — positive lengths, sorted unique
 starts, and each `stop` strictly below the next start — is exactly
-`List.Pairwise NR.before` on `NR`s (`internalAddPy_python_invariants`).
-Keeping the list and dictionary in sync (Python's
-`len(_start_items) == len(_start_to_length)` assertion) is structural here.
+`List.Pairwise NR.before` on `NR`s.
+
+This module abstracts away the two fields and their synchronization.
+`RangeSetBlaze/PyIntRangeSetState.lean` models both fields and Python's
+mutations of each, derives Python's invariants on them — including that
+`_start_items` is sorted and lists exactly the keys of `_start_to_length` —
+and proves that its `_internal_add` refines `internalAddPy`.
 
 ## Algorithm correspondence
 
@@ -98,6 +102,21 @@ lemma toSet_eq_Ico (r : NR) : r.val.toSet = Set.Ico r.val.lo r.stop := by
   simp only [ofStartStop, IntRange.mem_toSet_iff, Set.mem_Ico]
   omega
 
+@[simp] lemma lo_ofStartStop (start stop : Int) (h : start < stop) :
+    (ofStartStop start stop h).val.lo = start := rfl
+
+@[simp] lemma stop_ofStartStop (start stop : Int) (h : start < stop) :
+    (ofStartStop start stop h).stop = stop := by
+  simp [ofStartStop, NR.stop]
+
+@[simp] lemma length_ofStartStop (start stop : Int) (h : start < stop) :
+    (ofStartStop start stop h).length = stop - start := by
+  simp [NR.length]
+
+/-- Python's `start + _start_to_length[start]` is the stored range's `stop`. -/
+lemma lo_add_length (r : NR) : r.val.lo + r.length = r.stop := by
+  simp [NR.length]
+
 end IntRange.NR
 
 namespace RangeSetBlaze
@@ -110,7 +129,7 @@ open scoped IntRange.NR
 /-- Python's `bisect_left(self._start_items, start)`, returned as the ranges
 before and from the insertion index.  On sorted starts, the maximal prefix with
 `start_i < start` ends exactly at `bisect_left`'s index. -/
-private def bisectLeft (start : Int) (ranges : List NR) : List NR × List NR :=
+def bisectLeft (start : Int) (ranges : List NR) : List NR × List NR :=
   ranges.span (fun nr => decide (nr.val.lo < start))
 
 /-- Python's merge loop, where `current` is the range stored at `previous`
@@ -145,14 +164,14 @@ def absorbFollowing (current : NR) : List NR → NR × List NR
 
 /-- Store `current` after the untouched ranges and run the merge loop over the
 following ranges. -/
-private def mergeFollowing (untouched : List NR) (current : NR)
+def mergeFollowing (untouched : List NR) (current : NR)
     (following : List NR) : List NR :=
   let merged := absorbFollowing current following
   untouched ++ merged.1 :: merged.2
 
 /-- Python's branches when no stored range starts exactly at `start`:
 `index == 0`, or inspect `previous = _start_items[index - 1]`. -/
-private def addAfterPredecessor (ranges left right : List NR)
+def addAfterPredecessor (ranges left right : List NR)
     (start length : Int) (hlength : 0 < length) : List NR :=
   match left.getLast? with
   | none =>
@@ -172,7 +191,7 @@ private def addAfterPredecessor (ranges left right : List NR)
         mergeFollowing left (NR.ofStartStop start (start + length) (by omega)) right
 
 /-- The list computation of Python `_internal_add(start, length)`. -/
-private def internalAddPyNRs (ranges : List NR) (start length : Int)
+def internalAddPyNRs (ranges : List NR) (start length : Int)
     (hlength : 0 < length) : List NR :=
   let split := bisectLeft start ranges
   match split.2 with
@@ -211,7 +230,7 @@ theorem absorbFollowing_eq_deleteExtraNRs_loop (current : NR) (following : List 
 
 /-- `bisect_left` splits a canonical list into the ranges starting before
 `start` and those starting at or after it. -/
-private theorem bisectLeft_spec (start : Int) (ranges : List NR)
+theorem bisectLeft_spec (start : Int) (ranges : List NR)
     (hpw : List.Pairwise NR.before ranges) :
     let split := bisectLeft start ranges
     ranges = split.1 ++ split.2 ∧
@@ -402,20 +421,5 @@ theorem internalAddPy_toSet (s : RangeSetBlaze) (start length : Int)
       s.toSet ∪ Set.Ico start (start + length) :=
   (internalAddPyNRs_preserves_order_and_union s.ranges start length hlength
     s.canonical).2
-
-/-- After `_internal_add`, Python's representation invariants hold, stated in
-Python's vocabulary: every stored length is positive, `_start_items` is
-strictly increasing (so sorted with unique keys), and every range's `stop` is
-strictly below every later start (so ranges neither overlap nor touch). -/
-theorem internalAddPy_python_invariants (s : RangeSetBlaze) (start length : Int)
-    (hlength : 0 < length) :
-    let ranges := (internalAddPy s start length hlength).ranges
-    (∀ nr ∈ ranges, 0 < nr.length) ∧
-      (ranges.map (fun nr => nr.val.lo)).Pairwise (· < ·) ∧
-      ranges.Pairwise (fun a b => a.stop < b.val.lo) := by
-  have hcanonical := (internalAddPy s start length hlength).canonical
-  exact ⟨fun nr _ => nr.length_pos,
-    List.pairwise_map.mpr (hcanonical.imp NR.before_lo_lt),
-    hcanonical⟩
 
 end RangeSetBlaze

@@ -1,0 +1,1341 @@
+{
+  "collector": "scripts/phase0_metrics.py",
+  "collector_sha256": "a07fc3573ed0134219b1d539c2684d717707ab7360a8e0ba97602ef95549e048",
+  "collector_version": 3,
+  "compatibility": {
+    "comparison_rule": "Compare dashboard fields only with results produced by collector/schema v3.",
+    "legacy_v2_fields_unchanged": [
+      "files scalar fields",
+      "files[].tokens",
+      "totals",
+      "token_totals"
+    ]
+  },
+  "dashboard_totals": {
+    "automation": {
+      "grind": 2,
+      "linarith": 0,
+      "omega": 306,
+      "simp": 759,
+      "simpa": 361
+    },
+    "declarations": {
+      "abbreviations": 3,
+      "definitions": 168,
+      "definitions_and_abbreviations": 171,
+      "lemma_theorem_declarations": 246,
+      "lemmas": 138,
+      "private_lemma_theorem_declarations": 118,
+      "public_lemma_theorem_declarations": 128,
+      "theorems": 108
+    },
+    "proof_branching": {
+      "by_cases": 181,
+      "cases": 117,
+      "induction": 48
+    },
+    "proof_plumbing": {
+      "have": 1053,
+      "rw": 355,
+      "show": 41,
+      "suffices": 0
+    },
+    "representation_detail": {
+      "Sublist": 2,
+      "dropLast": 61,
+      "dropWhile": 11,
+      "getLast?": 52,
+      "list_span": 63,
+      "pairwise_append": 55,
+      "takeWhile": 42
+    }
+  },
+  "files": [
+    {
+      "active_code_loc": 80,
+      "blank_loc": 17,
+      "comment_only_loc": 2,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 2,
+          "simpa": 5
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 12,
+          "definitions_and_abbreviations": 12,
+          "lemma_theorem_declarations": 0,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 0,
+          "theorems": 0
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 9,
+          "rw": 0,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 12,
+      "file": "Main.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 99,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 9,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 2,
+        "simpa": 5
+      },
+      "total_nonblank_loc": 82
+    },
+    {
+      "active_code_loc": 17,
+      "blank_loc": 1,
+      "comment_only_loc": 2,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 0,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 0,
+          "definitions_and_abbreviations": 0,
+          "lemma_theorem_declarations": 0,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 0,
+          "theorems": 0
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 0,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 0,
+      "file": "RangeSetBlaze.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 20,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 19
+    },
+    {
+      "active_code_loc": 121,
+      "blank_loc": 8,
+      "comment_only_loc": 7,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 5,
+          "simpa": 8
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 2,
+          "definitions_and_abbreviations": 2,
+          "lemma_theorem_declarations": 1,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 1,
+          "theorems": 1
+        },
+        "proof_branching": {
+          "by_cases": 1,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 12,
+          "rw": 1,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 2,
+      "file": "RangeSetBlaze/AlgoA.lean",
+      "lemmas_theorems": 1,
+      "physical_loc": 136,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 1,
+        "cases": 0,
+        "grind": 0,
+        "have": 12,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 1,
+        "simp": 5,
+        "simpa": 8
+      },
+      "total_nonblank_loc": 128
+    },
+    {
+      "active_code_loc": 387,
+      "blank_loc": 28,
+      "comment_only_loc": 20,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 27,
+          "simp": 33,
+          "simpa": 6
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 6,
+          "definitions_and_abbreviations": 6,
+          "lemma_theorem_declarations": 16,
+          "lemmas": 15,
+          "private_lemma_theorem_declarations": 15,
+          "public_lemma_theorem_declarations": 1,
+          "theorems": 1
+        },
+        "proof_branching": {
+          "by_cases": 15,
+          "cases": 4,
+          "induction": 3
+        },
+        "proof_plumbing": {
+          "have": 39,
+          "rw": 8,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 1,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 6,
+      "file": "RangeSetBlaze/AlgoAMap.lean",
+      "lemmas_theorems": 16,
+      "physical_loc": 435,
+      "private_lemmas_theorems": 15,
+      "tokens": {
+        "by_cases": 15,
+        "cases": 4,
+        "grind": 0,
+        "have": 39,
+        "linarith": 0,
+        "omega": 27,
+        "rw": 8,
+        "simp": 33,
+        "simpa": 6
+      },
+      "total_nonblank_loc": 407
+    },
+    {
+      "active_code_loc": 443,
+      "blank_loc": 25,
+      "comment_only_loc": 21,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 35,
+          "simpa": 28
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 7,
+          "definitions_and_abbreviations": 7,
+          "lemma_theorem_declarations": 4,
+          "lemmas": 3,
+          "private_lemma_theorem_declarations": 3,
+          "public_lemma_theorem_declarations": 1,
+          "theorems": 1
+        },
+        "proof_branching": {
+          "by_cases": 1,
+          "cases": 20,
+          "induction": 3
+        },
+        "proof_plumbing": {
+          "have": 85,
+          "rw": 2,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 4,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 7,
+      "file": "RangeSetBlaze/AlgoB.lean",
+      "lemmas_theorems": 4,
+      "physical_loc": 489,
+      "private_lemmas_theorems": 3,
+      "tokens": {
+        "by_cases": 1,
+        "cases": 20,
+        "grind": 0,
+        "have": 85,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 2,
+        "simp": 35,
+        "simpa": 28
+      },
+      "total_nonblank_loc": 464
+    },
+    {
+      "active_code_loc": 1124,
+      "blank_loc": 68,
+      "comment_only_loc": 139,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 12,
+          "simp": 78,
+          "simpa": 50
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 15,
+          "definitions_and_abbreviations": 15,
+          "lemma_theorem_declarations": 21,
+          "lemmas": 9,
+          "private_lemma_theorem_declarations": 16,
+          "public_lemma_theorem_declarations": 5,
+          "theorems": 12
+        },
+        "proof_branching": {
+          "by_cases": 14,
+          "cases": 4,
+          "induction": 2
+        },
+        "proof_plumbing": {
+          "have": 167,
+          "rw": 57,
+          "show": 9,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 2,
+          "dropLast": 4,
+          "dropWhile": 11,
+          "getLast?": 21,
+          "list_span": 34,
+          "pairwise_append": 6,
+          "takeWhile": 36
+        }
+      },
+      "defs_abbrev": 15,
+      "file": "RangeSetBlaze/AlgoC.lean",
+      "lemmas_theorems": 21,
+      "physical_loc": 1331,
+      "private_lemmas_theorems": 16,
+      "tokens": {
+        "by_cases": 14,
+        "cases": 4,
+        "grind": 0,
+        "have": 167,
+        "linarith": 0,
+        "omega": 12,
+        "rw": 57,
+        "simp": 78,
+        "simpa": 50
+      },
+      "total_nonblank_loc": 1263
+    },
+    {
+      "active_code_loc": 1,
+      "blank_loc": 1,
+      "comment_only_loc": 1,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 0,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 0,
+          "definitions_and_abbreviations": 0,
+          "lemma_theorem_declarations": 0,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 0,
+          "theorems": 0
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 0,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 0,
+      "file": "RangeSetBlaze/AlgoCLen.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 3,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 2
+    },
+    {
+      "active_code_loc": 1289,
+      "blank_loc": 44,
+      "comment_only_loc": 87,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 49,
+          "simp": 160,
+          "simpa": 79
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 10,
+          "definitions_and_abbreviations": 10,
+          "lemma_theorem_declarations": 20,
+          "lemmas": 12,
+          "private_lemma_theorem_declarations": 16,
+          "public_lemma_theorem_declarations": 4,
+          "theorems": 8
+        },
+        "proof_branching": {
+          "by_cases": 51,
+          "cases": 6,
+          "induction": 6
+        },
+        "proof_plumbing": {
+          "have": 168,
+          "rw": 24,
+          "show": 2,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 19,
+          "dropWhile": 0,
+          "getLast?": 2,
+          "list_span": 12,
+          "pairwise_append": 10,
+          "takeWhile": 4
+        }
+      },
+      "defs_abbrev": 10,
+      "file": "RangeSetBlaze/AlgoCMap.lean",
+      "lemmas_theorems": 20,
+      "physical_loc": 1420,
+      "private_lemmas_theorems": 16,
+      "tokens": {
+        "by_cases": 51,
+        "cases": 6,
+        "grind": 0,
+        "have": 168,
+        "linarith": 0,
+        "omega": 49,
+        "rw": 24,
+        "simp": 160,
+        "simpa": 79
+      },
+      "total_nonblank_loc": 1376
+    },
+    {
+      "active_code_loc": 788,
+      "blank_loc": 47,
+      "comment_only_loc": 85,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 6,
+          "simp": 56,
+          "simpa": 36
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 15,
+          "definitions_and_abbreviations": 15,
+          "lemma_theorem_declarations": 16,
+          "lemmas": 3,
+          "private_lemma_theorem_declarations": 12,
+          "public_lemma_theorem_declarations": 4,
+          "theorems": 13
+        },
+        "proof_branching": {
+          "by_cases": 12,
+          "cases": 7,
+          "induction": 3
+        },
+        "proof_plumbing": {
+          "have": 80,
+          "rw": 39,
+          "show": 1,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 3,
+          "dropWhile": 0,
+          "getLast?": 10,
+          "list_span": 1,
+          "pairwise_append": 7,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 15,
+      "file": "RangeSetBlaze/AlgoD.lean",
+      "lemmas_theorems": 16,
+      "physical_loc": 920,
+      "private_lemmas_theorems": 12,
+      "tokens": {
+        "by_cases": 12,
+        "cases": 7,
+        "grind": 0,
+        "have": 80,
+        "linarith": 0,
+        "omega": 6,
+        "rw": 39,
+        "simp": 56,
+        "simpa": 36
+      },
+      "total_nonblank_loc": 873
+    },
+    {
+      "active_code_loc": 1764,
+      "blank_loc": 60,
+      "comment_only_loc": 62,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 59,
+          "simp": 145,
+          "simpa": 108
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 17,
+          "definitions_and_abbreviations": 17,
+          "lemma_theorem_declarations": 26,
+          "lemmas": 15,
+          "private_lemma_theorem_declarations": 22,
+          "public_lemma_theorem_declarations": 4,
+          "theorems": 11
+        },
+        "proof_branching": {
+          "by_cases": 52,
+          "cases": 19,
+          "induction": 7
+        },
+        "proof_plumbing": {
+          "have": 216,
+          "rw": 30,
+          "show": 7,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 34,
+          "dropWhile": 0,
+          "getLast?": 1,
+          "list_span": 3,
+          "pairwise_append": 11,
+          "takeWhile": 1
+        }
+      },
+      "defs_abbrev": 17,
+      "file": "RangeSetBlaze/AlgoDMap.lean",
+      "lemmas_theorems": 26,
+      "physical_loc": 1886,
+      "private_lemmas_theorems": 22,
+      "tokens": {
+        "by_cases": 52,
+        "cases": 19,
+        "grind": 0,
+        "have": 216,
+        "linarith": 0,
+        "omega": 59,
+        "rw": 30,
+        "simp": 145,
+        "simpa": 108
+      },
+      "total_nonblank_loc": 1826
+    },
+    {
+      "active_code_loc": 31,
+      "blank_loc": 11,
+      "comment_only_loc": 16,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 2,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 2,
+          "definitions_and_abbreviations": 2,
+          "lemma_theorem_declarations": 3,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 3,
+          "theorems": 3
+        },
+        "proof_branching": {
+          "by_cases": 1,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 2,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 2,
+      "file": "RangeSetBlaze/AlgoE.lean",
+      "lemmas_theorems": 3,
+      "physical_loc": 58,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 1,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 2,
+        "simp": 2,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 47
+    },
+    {
+      "active_code_loc": 514,
+      "blank_loc": 132,
+      "comment_only_loc": 113,
+      "dashboard": {
+        "automation": {
+          "grind": 1,
+          "linarith": 0,
+          "omega": 28,
+          "simp": 60,
+          "simpa": 2
+        },
+        "declarations": {
+          "abbreviations": 2,
+          "definitions": 26,
+          "definitions_and_abbreviations": 28,
+          "lemma_theorem_declarations": 57,
+          "lemmas": 55,
+          "private_lemma_theorem_declarations": 2,
+          "public_lemma_theorem_declarations": 55,
+          "theorems": 2
+        },
+        "proof_branching": {
+          "by_cases": 3,
+          "cases": 1,
+          "induction": 6
+        },
+        "proof_plumbing": {
+          "have": 9,
+          "rw": 29,
+          "show": 16,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 1,
+          "list_span": 2,
+          "pairwise_append": 1,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 28,
+      "file": "RangeSetBlaze/Basic.lean",
+      "lemmas_theorems": 40,
+      "physical_loc": 759,
+      "private_lemmas_theorems": 2,
+      "tokens": {
+        "by_cases": 3,
+        "cases": 1,
+        "grind": 1,
+        "have": 9,
+        "linarith": 0,
+        "omega": 28,
+        "rw": 29,
+        "simp": 60,
+        "simpa": 2
+      },
+      "total_nonblank_loc": 627
+    },
+    {
+      "active_code_loc": 372,
+      "blank_loc": 16,
+      "comment_only_loc": 10,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 16,
+          "simp": 23,
+          "simpa": 3
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 0,
+          "definitions_and_abbreviations": 0,
+          "lemma_theorem_declarations": 11,
+          "lemmas": 7,
+          "private_lemma_theorem_declarations": 7,
+          "public_lemma_theorem_declarations": 4,
+          "theorems": 4
+        },
+        "proof_branching": {
+          "by_cases": 2,
+          "cases": 16,
+          "induction": 6
+        },
+        "proof_plumbing": {
+          "have": 63,
+          "rw": 44,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 0,
+      "file": "RangeSetBlaze/Canonical.lean",
+      "lemmas_theorems": 9,
+      "physical_loc": 398,
+      "private_lemmas_theorems": 7,
+      "tokens": {
+        "by_cases": 2,
+        "cases": 16,
+        "grind": 0,
+        "have": 63,
+        "linarith": 0,
+        "omega": 16,
+        "rw": 44,
+        "simp": 23,
+        "simpa": 3
+      },
+      "total_nonblank_loc": 382
+    },
+    {
+      "active_code_loc": 48,
+      "blank_loc": 11,
+      "comment_only_loc": 15,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 1,
+          "simp": 0,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 0,
+          "definitions_and_abbreviations": 0,
+          "lemma_theorem_declarations": 7,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 7,
+          "theorems": 7
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 7,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 0,
+      "file": "RangeSetBlaze/CrossAlgorithm.lean",
+      "lemmas_theorems": 7,
+      "physical_loc": 74,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 1,
+        "rw": 7,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 63
+    },
+    {
+      "active_code_loc": 261,
+      "blank_loc": 47,
+      "comment_only_loc": 117,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 16,
+          "simp": 24,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 9,
+          "definitions_and_abbreviations": 9,
+          "lemma_theorem_declarations": 15,
+          "lemmas": 9,
+          "private_lemma_theorem_declarations": 4,
+          "public_lemma_theorem_declarations": 11,
+          "theorems": 6
+        },
+        "proof_branching": {
+          "by_cases": 1,
+          "cases": 1,
+          "induction": 1
+        },
+        "proof_plumbing": {
+          "have": 9,
+          "rw": 8,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 1,
+          "dropWhile": 0,
+          "getLast?": 1,
+          "list_span": 0,
+          "pairwise_append": 4,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 9,
+      "file": "RangeSetBlaze/PyIntRangeSet.lean",
+      "lemmas_theorems": 11,
+      "physical_loc": 425,
+      "private_lemmas_theorems": 4,
+      "tokens": {
+        "by_cases": 1,
+        "cases": 1,
+        "grind": 0,
+        "have": 9,
+        "linarith": 0,
+        "omega": 16,
+        "rw": 8,
+        "simp": 24,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 378
+    },
+    {
+      "active_code_loc": 4092,
+      "blank_loc": 14,
+      "comment_only_loc": 31,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 0,
+          "simp": 0,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 11,
+          "definitions_and_abbreviations": 11,
+          "lemma_theorem_declarations": 0,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 0,
+          "theorems": 0
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 0,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 0,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 11,
+      "file": "RangeSetBlaze/PyIntRangeSetCases.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 4137,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 0,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 0,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 4123
+    },
+    {
+      "active_code_loc": 445,
+      "blank_loc": 72,
+      "comment_only_loc": 153,
+      "dashboard": {
+        "automation": {
+          "grind": 1,
+          "linarith": 0,
+          "omega": 11,
+          "simp": 55,
+          "simpa": 15
+        },
+        "declarations": {
+          "abbreviations": 1,
+          "definitions": 8,
+          "definitions_and_abbreviations": 9,
+          "lemma_theorem_declarations": 26,
+          "lemmas": 10,
+          "private_lemma_theorem_declarations": 7,
+          "public_lemma_theorem_declarations": 19,
+          "theorems": 16
+        },
+        "proof_branching": {
+          "by_cases": 8,
+          "cases": 3,
+          "induction": 5
+        },
+        "proof_plumbing": {
+          "have": 29,
+          "rw": 34,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 1,
+          "takeWhile": 1
+        }
+      },
+      "defs_abbrev": 9,
+      "file": "RangeSetBlaze/PyIntRangeSetState.lean",
+      "lemmas_theorems": 26,
+      "physical_loc": 670,
+      "private_lemmas_theorems": 7,
+      "tokens": {
+        "by_cases": 8,
+        "cases": 3,
+        "grind": 1,
+        "have": 29,
+        "linarith": 0,
+        "omega": 11,
+        "rw": 34,
+        "simp": 55,
+        "simpa": 15
+      },
+      "total_nonblank_loc": 598
+    },
+    {
+      "active_code_loc": 1062,
+      "blank_loc": 39,
+      "comment_only_loc": 35,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 80,
+          "simp": 81,
+          "simpa": 21
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 10,
+          "definitions_and_abbreviations": 10,
+          "lemma_theorem_declarations": 23,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 14,
+          "public_lemma_theorem_declarations": 9,
+          "theorems": 23
+        },
+        "proof_branching": {
+          "by_cases": 20,
+          "cases": 32,
+          "induction": 6
+        },
+        "proof_plumbing": {
+          "have": 167,
+          "rw": 70,
+          "show": 6,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 16,
+          "list_span": 11,
+          "pairwise_append": 10,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 9,
+      "file": "RangeSetBlaze/Query.lean",
+      "lemmas_theorems": 21,
+      "physical_loc": 1136,
+      "private_lemmas_theorems": 14,
+      "tokens": {
+        "by_cases": 20,
+        "cases": 32,
+        "grind": 0,
+        "have": 167,
+        "linarith": 0,
+        "omega": 80,
+        "rw": 70,
+        "simp": 81,
+        "simpa": 21
+      },
+      "total_nonblank_loc": 1097
+    },
+    {
+      "active_code_loc": 197,
+      "blank_loc": 36,
+      "comment_only_loc": 52,
+      "dashboard": {
+        "automation": {
+          "grind": 0,
+          "linarith": 0,
+          "omega": 1,
+          "simp": 0,
+          "simpa": 0
+        },
+        "declarations": {
+          "abbreviations": 0,
+          "definitions": 18,
+          "definitions_and_abbreviations": 18,
+          "lemma_theorem_declarations": 0,
+          "lemmas": 0,
+          "private_lemma_theorem_declarations": 0,
+          "public_lemma_theorem_declarations": 0,
+          "theorems": 0
+        },
+        "proof_branching": {
+          "by_cases": 0,
+          "cases": 4,
+          "induction": 0
+        },
+        "proof_plumbing": {
+          "have": 0,
+          "rw": 0,
+          "show": 0,
+          "suffices": 0
+        },
+        "representation_detail": {
+          "Sublist": 0,
+          "dropLast": 0,
+          "dropWhile": 0,
+          "getLast?": 0,
+          "list_span": 0,
+          "pairwise_append": 0,
+          "takeWhile": 0
+        }
+      },
+      "defs_abbrev": 18,
+      "file": "RangeSetBlaze/Regression.lean",
+      "lemmas_theorems": 0,
+      "physical_loc": 285,
+      "private_lemmas_theorems": 0,
+      "tokens": {
+        "by_cases": 0,
+        "cases": 4,
+        "grind": 0,
+        "have": 0,
+        "linarith": 0,
+        "omega": 1,
+        "rw": 0,
+        "simp": 0,
+        "simpa": 0
+      },
+      "total_nonblank_loc": 249
+    }
+  ],
+  "method": "comment-aware lexical fallback; dashboard syntax counts also mask literals",
+  "schema_version": 3,
+  "source_identity": {
+    "base_commit": "17a110756fd90ecab9a19f98b21111849b19b63c",
+    "base_tree": "b1ed5198cff493d613ee7d58545f7f9f91bbf5db",
+    "mode": "working-tree",
+    "source_bytes_manifest": [
+      {
+        "file": "Main.lean",
+        "sha256": "05230e964198a43f3cc823f3dff62a94f746ac66c2f80df73e36d4024a6050ea",
+        "size": 3192
+      },
+      {
+        "file": "RangeSetBlaze.lean",
+        "sha256": "b9c540d3cc5eea2e24ff035f86bbf26981218fc851abaf2b75f9a76d330e29c6",
+        "size": 764
+      },
+      {
+        "file": "RangeSetBlaze/AlgoA.lean",
+        "sha256": "e3ca37a3571131714ca2c0841c7f2061e7acb4982f4d4b6063404c79a3401f9a",
+        "size": 5490
+      },
+      {
+        "file": "RangeSetBlaze/AlgoAMap.lean",
+        "sha256": "d9030ca7035a83ef2f42dfb10b8e1a839643b79656d355afb5b426f464e9674f",
+        "size": 19476
+      },
+      {
+        "file": "RangeSetBlaze/AlgoB.lean",
+        "sha256": "dfb3ada8985d908f0262729b2465ea0db34c3e9c1bbf5d63e520b6f8558c4dae",
+        "size": 19437
+      },
+      {
+        "file": "RangeSetBlaze/AlgoC.lean",
+        "sha256": "cf0bf0688ae51675dd2006dad27702764139830da9e039d0007835d920d00eea",
+        "size": 61443
+      },
+      {
+        "file": "RangeSetBlaze/AlgoCLen.lean",
+        "sha256": "27189f609ee68c7a15e0c0be4d47c5d17ad4886360142d63af5a40120316fb6f",
+        "size": 90
+      },
+      {
+        "file": "RangeSetBlaze/AlgoCMap.lean",
+        "sha256": "573b57a21496528c3c6f757b8792010744edb2adb9adb21a7cb9184bad76f821",
+        "size": 70173
+      },
+      {
+        "file": "RangeSetBlaze/AlgoD.lean",
+        "sha256": "e4645e2ea734b6bd954f9cb4b84178a3eaabd11ab0ab96ffe741b0535609a7fb",
+        "size": 42284
+      },
+      {
+        "file": "RangeSetBlaze/AlgoDMap.lean",
+        "sha256": "3d477e0a9da5014230a218bb099ae34f7a4666fa1e2a5fb19d69779dff04edb6",
+        "size": 95266
+      },
+      {
+        "file": "RangeSetBlaze/AlgoE.lean",
+        "sha256": "7ff9b8ddd5d9de9e7d0b468102607e373acf8ed7b41b07876df58fea622f5bd2",
+        "size": 2543
+      },
+      {
+        "file": "RangeSetBlaze/Basic.lean",
+        "sha256": "f902825fedb895edf14b343f62be69a20e418214dd0c6d230f6ff5ae2a464ed8",
+        "size": 29017
+      },
+      {
+        "file": "RangeSetBlaze/Canonical.lean",
+        "sha256": "7cc7ede659c0342e0cde370577bfd52c8e5fe35f68144c534a8698c042a1dab7",
+        "size": 17013
+      },
+      {
+        "file": "RangeSetBlaze/CrossAlgorithm.lean",
+        "sha256": "fd3bd8458a81f44ddcd385b1a945a59d1e4f1c3eae82879c50aa53b4d1ff47c7",
+        "size": 3068
+      },
+      {
+        "file": "RangeSetBlaze/PyIntRangeSet.lean",
+        "sha256": "ad824d7f0cdaf79d8cc149b29f69dcb985fc2684fcf5fb1a82004708d2688caa",
+        "size": 19281
+      },
+      {
+        "file": "RangeSetBlaze/PyIntRangeSetCases.lean",
+        "sha256": "6321eb8e19a50aea789b836a3c95fac9398a2c505269f2d25f174c2e0dd5e1cc",
+        "size": 177441
+      },
+      {
+        "file": "RangeSetBlaze/PyIntRangeSetState.lean",
+        "sha256": "700d337ddded997cbd4f3fcec92f0b1835804bec23c81490ecbb8aa2fa906aad",
+        "size": 31836
+      },
+      {
+        "file": "RangeSetBlaze/Query.lean",
+        "sha256": "3a8ab921eed1e706b1f052fd4c773cdb5e063c4e6f3e14d1005802acece624e3",
+        "size": 54355
+      },
+      {
+        "file": "RangeSetBlaze/Regression.lean",
+        "sha256": "cf6ad9ce5c7bdaf8b40b91963528efd92be424997966ff2028ec9aa52d1b833c",
+        "size": 13189
+      }
+    ],
+    "source_bytes_manifest_sha256": "488ead3bd1f921ccc3d389721905e453edb0663463b559cfc2422581bb686a17"
+  },
+  "source_root": "/home/carlk/programs/range-set-blaze-vibe-validation",
+  "token_totals": {
+    "by_cases": 181,
+    "cases": 117,
+    "grind": 2,
+    "have": 1053,
+    "linarith": 0,
+    "omega": 306,
+    "rw": 355,
+    "simp": 759,
+    "simpa": 361
+  },
+  "totals": {
+    "active_code_loc": 13036,
+    "blank_loc": 677,
+    "comment_only_loc": 968,
+    "defs_abbrev": 170,
+    "lemmas_theorems": 221,
+    "physical_loc": 14681,
+    "private_lemmas_theorems": 118,
+    "total_nonblank_loc": 14004
+  }
+}

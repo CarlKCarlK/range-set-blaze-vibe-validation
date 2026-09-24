@@ -97,24 +97,6 @@ def QueryResultSpec (set : RangeSetBlaze) (lower upper key : Int)
 def WithinDomain (set : RangeSetBlaze) (lower upper : Int) : Prop :=
   ∀ range ∈ set.ranges, lower ≤ range.val.lo ∧ range.val.hi ≤ upper
 
-private theorem mem_rangesToSet_iff
-    {ranges : List IntRange.NR} {key : Int} :
-    key ∈ rangesToSet ranges ↔
-      ∃ range ∈ ranges, range.val.lo ≤ key ∧ key ≤ range.val.hi := by
-  induction ranges with
-  | nil => simp
-  | cons range rest ih =>
-      simp only [rangesToSet_cons, Set.mem_union, IntRange.mem_toSet_iff, ih]
-      constructor
-      · rintro (h | h)
-        · exact ⟨range, by simp, h⟩
-        · rcases h with ⟨candidate, hmem, hcontains⟩
-          exact ⟨candidate, by simp [hmem], hcontains⟩
-      · rintro ⟨candidate, hmem, hcontains⟩
-        rcases List.mem_cons.mp hmem with rfl | hmem
-        · exact Or.inl hcontains
-        · exact Or.inr ⟨candidate, hmem, hcontains⟩
-
 private theorem canonical_range_before_of_mem_before_last
     {initial : List IntRange.NR} {last candidate : IntRange.NR}
     (hcanonical : List.Pairwise IntRange.NR.before (initial ++ [last]))

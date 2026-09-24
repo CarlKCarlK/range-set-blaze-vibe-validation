@@ -4,6 +4,7 @@ import RangeSetBlaze.AlgoC
 import RangeSetBlaze.AlgoD
 import RangeSetBlaze.AlgoE
 import RangeSetBlaze.PyIntRangeSet
+import RangeSetBlaze.PyIntRangeSetState
 import RangeSetBlaze.PyIntRangeSetCases
 
 namespace RangeSetBlaze
@@ -96,11 +97,26 @@ example : agrees (testSet [testNR 10 12, testNR 16 18]) { lo := 13, hi := 15 }
 
 /-! ## PySnpTools `IntRangeSet._internal_add`
 
-The Python model works with half-open `(start, stop)` pairs.  The generated
-cases record the real Python results for every `(start, length)` in a window
-around several base sets; each must match the Lean model exactly and agree
+The generated cases record the real Python state after `_internal_add` —
+`ranges()`, `_start_items`, and `_start_to_length` — for every
+`(start, length)` in a window around several base sets, and after every call
+of seeded random call sequences from `IntRangeSet()`.  Each call is checked
+against both Lean models: the list model `internalAddPy` must produce Python's
+`ranges()`, and the two-field model `PyIntRangeSet.internalAdd` must not raise
+and must produce Python's `_start_items` and `_start_to_length`, and the
+abstraction `storedRanges` of its result must be the list model's result.
+Base-set cases start the two-field model from Python's own fields; sequences
+run both Lean models in lockstep with Python.  The list model must also agree
 with Algos A, C, and D on the inclusive input `[start, start + length - 1]`.
 -/
+
+-- BEGIN python-differential
+-- `scripts/mutate_py_intrangeset_state.py` appends this region verbatim to
+-- mutants of `PyIntRangeSetState.lean`, so it may use only the Python models
+-- and the generated cases.
+section PythonDifferential
+
+open PyIntRangeSetCases
 
 /-- The canonical range set for Python half-open ranges, if they are canonical. -/
 private def ofHalfOpen (ranges : List (Int × Int)) : Option RangeSetBlaze :=
@@ -115,46 +131,130 @@ private def ofHalfOpen (ranges : List (Int × Int)) : Option RangeSetBlaze :=
 private def toHalfOpen (s : RangeSetBlaze) : List (Int × Int) :=
   s.ranges.map fun nr => (nr.val.lo, nr.stop)
 
-/-- Python `_internal_add(start, length)` on `base` yields `expected`, and the
-other algorithms produce the same canonical ranges. -/
-private def pyAgrees (base : List (Int × Int)) (start length : Int)
-    (expected : List (Int × Int)) : Bool :=
-  match ofHalfOpen base with
+/-- Pair up a flattened `start stop start stop ...` list. -/
+private def pairUp? : List Int → Option (List (Int × Int))
+  | [] => some []
+  | start :: stop :: rest => ((start, stop) :: ·) <$> pairUp? rest
+  | [_] => none
+
+/-- Space-separated integers; `none` if any token is not an integer. -/
+private def parseInts? (text : String) : Option (List Int) :=
+  if text.isEmpty then some [] else (text.splitOn " ").mapM String.toInt?
+
+/-- A Python `IntRangeSet` state as generated: `ranges | items | dict`. -/
+private structure PyObserved where
+  ranges : List (Int × Int)
+  items : List Int
+  dict : List (Int × Int)
+
+private def parseObserved? (text : String) : Option PyObserved :=
+  match text.splitOn " | " with
+  | [ranges, items, dict] => do
+      pure ⟨← pairUp? (← parseInts? ranges), ← parseInts? items, ← pairUp? (← parseInts? dict)⟩
+  | _ => none
+
+/-- A case line `start length | ranges | items | dict`. -/
+private def parseCase? (line : String) : Option (Int × Int × PyObserved) :=
+  match line.splitOn " | " with
+  | call :: state => do
+      let [start, length] ← parseInts? call | none
+      pure (start, length, ← parseObserved? (" | ".intercalate state))
+  | [] => none
+
+/-- Python's `self._start_to_length.get(k)`. -/
+private def lookup (dict : List (Int × Int)) (k : Int) : Option Int :=
+  (dict.find? (·.1 == k)).map (·.2)
+
+/-- Python's two fields, as the two-field model's state. -/
+private def PyObserved.toState (observed : PyObserved) : PyIntRangeSet :=
+  ⟨observed.items, lookup observed.dict⟩
+
+/-- The model's fields equal Python's: the same `_start_items`, and the same
+`_start_to_length` at every key either could hold.  A model key outside
+Python's is either an earlier key or one the call wrote, which is `start`
+or an earlier key, so `earlierKeys` must include those. -/
+private def fieldsMatch (py : PyIntRangeSet) (observed : PyObserved)
+    (earlierKeys : List Int) : Bool :=
+  py.startItems == observed.items &&
+    (earlierKeys ++ observed.dict.map (·.1)).all fun k =>
+      py.startToLength k == lookup observed.dict k
+
+/-- One `_internal_add(start, length)` on both Lean models, checked against
+Python's resulting state; returns the new Lean states. -/
+private def pyStep (s : RangeSetBlaze) (py : PyIntRangeSet) (start length : Int)
+    (observed : PyObserved) : Option (RangeSetBlaze × PyIntRangeSet) :=
+  if h : 0 < length then
+    let s' := internalAddPy s start length h
+    match py.internalAdd start length with
+    | none => none
+    | some py' =>
+        if toHalfOpen s' == observed.ranges &&
+            fieldsMatch py' observed (start :: py.startItems) &&
+            py'.storedRanges == s'.ranges then
+          some (s', py')
+        else
+          none
+  else
+    none
+
+/-- Every generated line of `cases` agrees, each starting from `base`. -/
+private def pyCasesAgree (base cases : String) : Bool :=
+  match parseObserved? base with
+  | none => false
+  | some observed =>
+      match ofHalfOpen observed.ranges with
+      | none => false
+      | some s =>
+          let lines := (cases.splitOn "\n").filter (· ≠ "")
+          !lines.isEmpty && lines.all fun line =>
+            match parseCase? line with
+            | some (start, length, result) =>
+                (pyStep s observed.toState start length result).isSome
+            | none => false
+
+/-- Run generated call sequences in lockstep; `new` restarts both Lean models
+from `IntRangeSet()`. -/
+private def pySequencesAgree : List String → RangeSetBlaze × PyIntRangeSet → Bool
+  | [], _ => true
+  | "new" :: rest, _ => pySequencesAgree rest (⟨[], .nil⟩, PyIntRangeSet.empty)
+  | line :: rest, (s, py) =>
+      match parseCase? line >>= fun (start, length, result) => pyStep s py start length result with
+      | some next => pySequencesAgree rest next
+      | none => false
+
+example : pyCasesAgree pyBase0 pyCases0 ∧ pyCasesAgree pyBase1 pyCases1 ∧
+    pyCasesAgree pyBase2 pyCases2 ∧ pyCasesAgree pyBase3 pyCases3 ∧
+    pyCasesAgree pyBase4 pyCases4 := by native_decide
+
+example : let lines := (pySequences.splitOn "\n").filter (· ≠ "")
+    lines.head? = some "new" ∧ pySequencesAgree lines (⟨[], .nil⟩, PyIntRangeSet.empty) := by
+  native_decide
+
+end PythonDifferential
+-- END python-differential
+
+/-- The list model agrees with Algos A, C, and D on every generated case. -/
+private def pyCrossAgrees (base cases : String) : Bool :=
+  match parseObserved? base >>= fun observed => ofHalfOpen observed.ranges with
   | none => false
   | some s =>
-      if h : 0 < length then
-        let input : IntRange := { lo := start, hi := start + length - 1 }
-        let py := internalAddPy s start length h
-        toHalfOpen py == expected &&
-          py.ranges == (internalAddA s input).ranges &&
-          py.ranges == (internalAddC s input).ranges &&
-          py.ranges == (internalAddD s input).ranges
-      else
-        false
-
-/-- Pair up a flattened `start stop start stop ...` list. -/
-private def pairUp : List Int → List (Int × Int)
-  | start :: stop :: rest => (start, stop) :: pairUp rest
-  | _ => []
-
-private def parseInts (line : String) : List Int :=
-  (line.splitOn " ").filterMap String.toInt?
-
-/-- Check every generated `start length ranges...` line against `base`. -/
-private def pyAgreesAll (base cases : String) : Bool :=
-  let baseRanges := pairUp (parseInts base)
-  let lines := (cases.splitOn "\n").filter (· ≠ "")
-  !lines.isEmpty && lines.all fun line =>
-    match parseInts line with
-    | start :: length :: expected =>
-        (parseInts line).length == (line.splitOn " ").length &&
-          pyAgrees baseRanges start length (pairUp expected)
-    | _ => false
+      ((cases.splitOn "\n").filter (· ≠ "")).all fun line =>
+        match parseCase? line with
+        | some (start, length, _) =>
+            if h : 0 < length then
+              let input : IntRange := { lo := start, hi := start + length - 1 }
+              let py := internalAddPy s start length h
+              py.ranges == (internalAddA s input).ranges &&
+                py.ranges == (internalAddC s input).ranges &&
+                py.ranges == (internalAddD s input).ranges
+            else
+              false
+        | none => false
 
 open PyIntRangeSetCases in
-example : pyAgreesAll pyBase0 pyCases0 ∧ pyAgreesAll pyBase1 pyCases1 ∧
-    pyAgreesAll pyBase2 pyCases2 ∧ pyAgreesAll pyBase3 pyCases3 ∧
-    pyAgreesAll pyBase4 pyCases4 := by native_decide
+example : pyCrossAgrees pyBase0 pyCases0 ∧ pyCrossAgrees pyBase1 pyCases1 ∧
+    pyCrossAgrees pyBase2 pyCases2 ∧ pyCrossAgrees pyBase3 pyCases3 ∧
+    pyCrossAgrees pyBase4 pyCases4 := by native_decide
 
 /-- Python `IntRangeSet(...)` construction without `_static_ranges`
 pre-coalescing: `_internal_add` each nonempty half-open range in turn. -/

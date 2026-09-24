@@ -386,6 +386,26 @@ def cardinality (s : RangeSetBlaze) : Nat :=
   | cons x xs ih =>
       simp [ih, Set.union_left_comm, Set.union_comm]
 
+/-- A key belongs to a range list's set exactly when some stored range
+contains it. -/
+theorem mem_rangesToSet_iff
+    {ranges : List NR} {key : Int} :
+    key ∈ rangesToSet ranges ↔
+      ∃ range ∈ ranges, range.val.lo ≤ key ∧ key ≤ range.val.hi := by
+  induction ranges with
+  | nil => simp
+  | cons range rest ih =>
+      simp only [rangesToSet_cons, Set.mem_union, IntRange.mem_toSet_iff, ih]
+      constructor
+      · rintro (h | h)
+        · exact ⟨range, by simp, h⟩
+        · rcases h with ⟨candidate, hmem, hcontains⟩
+          exact ⟨candidate, by simp [hmem], hcontains⟩
+      · rintro ⟨candidate, hmem, hcontains⟩
+        rcases List.mem_cons.mp hmem with rfl | hmem
+        · exact Or.inl hcontains
+        · exact Or.inr ⟨candidate, hmem, hcontains⟩
+
 /-- Every range occurring in a list is contained in that list's represented set. -/
 private lemma member_toSet_subset_rangesToSet
     {ranges : List NR} {nr : NR} (hmem : nr ∈ ranges) :
