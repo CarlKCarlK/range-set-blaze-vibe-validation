@@ -11,7 +11,9 @@ Do not edit any files. Report findings only.
 ## What was built
 
 A Rust SIMD kernel finds runs of consecutive integers in a slice, and a Lean model of it was
-proved correct.
+proved correct. The kernel is part of the in-progress `fearless-simd` pull request to
+`range-set-blaze` (not yet merged; compare against `main` to see the PR's changes), and the Lean
+proof accompanies that PR.
 
 * Rust: repository `/home/carlk/programs/range-set-blaze`, branch `fearless-simd`, file
   `src/from_slice.rs`. Key pieces: `collect_ranges` (the kernel), `is_consecutive_with_offsets`,
