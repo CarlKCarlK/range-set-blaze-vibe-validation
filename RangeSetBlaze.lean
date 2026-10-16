@@ -10,6 +10,7 @@ import RangeSetBlaze.AlgoDMap
 import RangeSetBlaze.AlgoE
 import RangeSetBlaze.CrossAlgorithm
 import RangeSetBlaze.Query
+import RangeSetBlaze.SimdRunCheck
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)

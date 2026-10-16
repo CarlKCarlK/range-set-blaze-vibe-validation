@@ -19,8 +19,11 @@ The repository includes proofs and supporting tests for several RangeSetBlaze an
 - production and cursor-based range-set insertion;
 - production and cursor-based range-map insertion;
 - cached-length updates for the insertion algorithms;
-- uniqueness of canonical range-set and range-map representations; and
-- baseline and cursor-based `range_or_gap_at` operations.
+- uniqueness of canonical range-set and range-map representations;
+- baseline and cursor-based `range_or_gap_at` operations; and
+- the SIMD run-finding kernel behind `from_slice`, for unsigned lanes, including exactly which
+  unroll factors keep its wraparound check sound (`RangeSetBlaze/SimdRunCheck.lean`; see
+  `specs/simd-run-check.md`).
 
 The project also includes a small formalization of the subset of `BTreeMap` semantics used by these algorithms. Rust comparison tests check that a simple sorted-`Vec` implementation and the real `BTreeMap` implementation have the same observable behavior for that interface.
 
