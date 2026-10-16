@@ -1,6 +1,8 @@
 # Adversarial review prompt: SIMD run checks
 
-Paste everything below the line into a fresh coding session, preferably with a different strong
+This prompt was used to review commit `40df248`, when the kernel model covered only unsigned
+lanes; some declaration names below have since changed (the kernel is now generic, in
+`SimdKernel.lean`). Paste everything below the line into a fresh coding session, preferably with a different strong
 model than the one that wrote the proof (Rules 1 and 7 of "Nine Rules for Vibe Validation").
 
 ---

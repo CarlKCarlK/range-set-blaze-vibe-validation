@@ -56,46 +56,69 @@ axioms.
 
 ## Part B results
 
-All in `RangeSetBlaze/SimdRunCheck.lean`, building on four arithmetic and list facts:
+### Lane-level facts (`SimdRunCheck.lean`)
 
 * `isRun_wrappingRun_iff`: a wrapping run is a real run exactly when it does not pass the top,
   `first + len ≤ 2^w`.
 * `isRun_of_chunkCheck`: **the fixed chunk check is sound** for chunks of at most `2^w` lanes.
-  Every SIMD chunk qualifies.
-* `blockCheck_sound_iff`: **exactly when the unrolled block check is sound.** For blocks of `M`
-  values that continue a run, it accepts only real runs, for every such block, if and only if
-  `M ≤ 2^w` or `2^w ∣ M`. Production (`u8`: 64 lanes × unroll 4 = 256) sits at the boundary;
-  unroll 8 is sound only through divisibility plus the continuation precondition; unroll 5 is not.
-* `chunksMatch_iff` and `kernelBlockCheck_eq_blockCheck`: the kernel's chunk-by-chunk comparison,
-  stepping the expected vector by `L`, is the block check above.
-* `kernelLanesMatch_eq_lanesMatch`: the lane test as Rust writes it,
-  `(values - offsets) == splat(first)`, is the model's `lanesMatch`.
-* `rangeSet_collectRanges`: **the kernel is correct.** A model of `collect_ranges` that follows
-  its loops and branches (the outer chunk loop, the unrolled extension loop, the single-chunk
-  extension loop, the scalar fallbacks, and `RangeCollector::push` merging) returns ranges whose
-  union is exactly the set of slice values, given `L ≤ 2^w` and the block condition.
-* `allNonempty_kernelRanges`: **the kernel never returns a backwards range** (`start > stop`).
-  `RangeCollector::push` and `UnionIter` both assert this, and set equality alone cannot rule it
-  out, since a backwards range covers nothing. `kernelRanges_correct` combines both guarantees.
-* `production_kernel_correct_unsigned`: the shipped configuration (512-bit vectors, unroll 4)
-  satisfies the conditions for `u8`, `u16`, `u32`, and `u64` lanes. It does not cover the kernel's
-  other key types; see "Scope".
+* `blockCheck_sound_iff`: **exactly when the unrolled block check is sound** for unsigned lanes:
+  blocks of `M` values that continue a run are always real runs if and only if `M ≤ 2^w` or
+  `2^w ∣ M`. Production (`u8`: 64 lanes × unroll 4 = 256) sits at the boundary; unroll 8 is sound
+  only through divisibility plus the continuation precondition; unroll 5 is not.
+* `chunksMatch_iff`, `kernelBlockCheck_eq_blockCheck`, `kernelLanesMatch_eq_lanesMatch`: the
+  kernel's chunk-by-chunk comparison and its subtract-offsets lane test are the model's.
 
-The main lemmas depend only on Lean and Mathlib's standard axioms (`propext`,
-`Classical.choice`, `Quot.sound`). Two mutations confirmed the proofs depend on the fix: dropping
-`first ≤ last` from `chunkCheck` breaks five proofs, and changing the production unroll factor to
-5 breaks `production_kernel_correct_unsigned`.
+### The kernel, generic over the key type (`SimdKernel.lean`)
+
+Rust's `collect_ranges` is generic over `T: SimdInteger`, so the model is too. `SimdKey K`
+collects what the kernel needs from a key type: its order, `sub_one` (with the law that it is the
+immediate predecessor), the chunk test, and the block comparison. The kernel's meaning is stated
+in key space, as sets of keys. This matters for `char`, whose `sub_one` skips the surrogate gap:
+the kernel rightly continues a run from `'\u{D7FF}'` to `'\u{E000}'`, which are adjacent
+characters but not adjacent lane values.
+
+* `SimdKey.kernelRanges_correct`: **the kernel is correct for any key type**, given a sound
+  unrolled loop: its ranges cover exactly the input keys, and none is backwards (`start > stop`).
+  `RangeCollector::push` and `UnionIter` both assert the second; set equality alone cannot rule
+  it out, since a backwards range covers nothing.
+
+### The key types (`SimdKeys*.lean`)
+
+`LaneKey` (`SimdKeys.lean`) is the shared recipe: keys map to `w`-bit lanes and are ordered like
+their lanes after adding a fixed shift. Its chunk test and unrolled loop are proved sound once,
+whenever a block holds at most `2^w` keys, which every shipped configuration satisfies.
+
+| Rust key types | Model | Shipped theorem |
+|---|---|---|
+| `u8` `u16` `u32` `u64` `usize`, `Ipv4Addr` | `unsignedLaneKey` (shift `0`) | `shipped_unsigned_kernel_correct` |
+| `i8` `i16` `i32` `i64` `isize` | `signedLaneKey` (shift `2^(w-1)`) | `shipped_signed_kernel_correct` |
+| `char` | `charLaneKey` (`sub_one` skips the surrogate gap) | `shipped_char_kernel_correct` |
+| `u128`, `Ipv6Addr` | `u128SimdKey` (two `u64` lanes per key) | `shipped_128bit_kernel_correct` |
+| `i128` | `i128SimdKey` (two lanes, signed order) | `shipped_128bit_kernel_correct` |
+
+Each shipped theorem covers 512-bit vectors and unroll factor 4. For 128-bit keys, the two-lane
+test plus `first ≤ last` rules out a carry from the low half into the high half, so SIMD can miss
+a run but never invent one. `Ipv4Addr` and `Ipv6Addr` are converted lane by lane in Rust, with
+exactly `u32`'s and `u128`'s lanes and order, so the unsigned models cover them.
+
+All of these depend only on Lean and Mathlib's standard axioms (`propext`, `Classical.choice`,
+`Quot.sound`). Two mutations of the unsigned-only first version confirmed the proofs depend on the
+fix: dropping `first ≤ last` from the chunk test broke five proofs, and changing the shipped
+unroll factor to 5 broke its production theorem.
 
 ## Scope and correspondence
 
-* **Modeled:** unsigned lanes of any width `w`, any lane count `L`, any unroll factor, the
-  kernel's control flow, the continuation tests, and `RangeCollector::push`.
+* **Modeled:** every key type the Rust kernel runs on, the kernel's control flow (the outer chunk
+  loop, both extension loops, the scalar fallbacks), the continuation tests, the lane tests, and
+  `RangeCollector::push`.
 * **Not modeled:**
-  * signed lanes (`i8` … `i64`, `isize`), whose `first ≤ last` uses signed order;
-  * 128-bit keys (`u128`, `i128`, `Ipv6Addr`), which span two 64-bit lanes;
-  * key types loaded lane by lane (`char`, `Ipv4Addr`);
   * the sort and union after the kernel, which only operate on the ranges it returns;
-  * the map kernel (`from_slices`).
+  * the map kernel (`from_slices`);
+  * the generic block-soundness condition is `M ≤ 2^w`; the exact condition with its
+    `2^w ∣ M` case is proved only at the lane level for unsigned lanes (`blockCheck_sound_iff`).
+* **Trusted, not proved:** that `fearless_simd`'s lane operations (on every dispatch level,
+  including the scalar fallback), `bytemuck`'s reinterpretation, and the compiler behave as the
+  model assumes.
 * **Correspondence** is by inspection: each Lean definition's doc comment names the Rust code it
   models. The unroll-5 counterexample was confirmed against the real kernel.
 
@@ -139,11 +162,19 @@ Checked against "Nine Rules for Vibe Validation of Vibe-Coded Algorithms":
      condition is sufficient but stricter than necessary, so "exactly when" overstated it. Fixed
      in the Rust doc comment (`range-set-blaze` commit `8806b1ad`): exact for full lane types,
      conservative for converted ones. Shipped unroll 4 is unaffected.
-* **Meta-prompting (Rule 1):** not followed. The proof was developed directly in one session.
+* **Meta-prompting (Rule 1):** partly. The first version was developed directly in one session.
+  For the generalization to every key type, the session wrote self-contained prompts for Sonnet
+  subagents (integers, `char`, and 128-bit keys), then compiled, axiom-checked, and read each
+  result before committing it. One subagent defined its own `LinearOrder Char`; it was replaced
+  with Mathlib's, which already exists.
+* **Generalization metrics** (all `Simd*` files, v3 collector), from the unsigned-only version
+  (`4510c95`) to every key type: active code lines 501 → 1,026, theorems 39 → 72, `have`
+  42 → 113. A cleanup pass on the subagent-written files, especially `SimdKeys128.lean`, is
+  still to do.
 
 ## Possible follow-ups
 
-* Signed lanes, via the order isomorphism that adds `2^(w-1)` (flipping the sign bit), which
-  preserves wrapping addition.
-* 128-bit lanes: matching `splat(first) + [0, 0, 1, 0, …]` implies a real `u128` run.
+* A cleanup pass (Rules 2 and 4) on the generalized proof.
+* The map kernel (`from_slices`): same as `from_iter` on keys and values, with last-wins
+  priority.
 * State the kernel's result in the library's range vocabulary (Rule 9).
