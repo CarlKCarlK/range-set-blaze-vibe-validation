@@ -15,6 +15,7 @@ import RangeSetBlaze.SimdKernel
 import RangeSetBlaze.SimdKeys
 import RangeSetBlaze.SimdKeysInt
 import RangeSetBlaze.SimdKeysChar
+import RangeSetBlaze.SimdKeys128
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
