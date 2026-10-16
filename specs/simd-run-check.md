@@ -74,6 +74,9 @@ All in `RangeSetBlaze/SimdRunCheck.lean`, building on four arithmetic and list f
   its loops and branches (the outer chunk loop, the unrolled extension loop, the single-chunk
   extension loop, the scalar fallbacks, and `RangeCollector::push` merging) returns ranges whose
   union is exactly the set of slice values, given `L ≤ 2^w` and the block condition.
+* `allNonempty_kernelRanges`: **the kernel never returns a backwards range** (`start > stop`).
+  `RangeCollector::push` and `UnionIter` both assert this, and set equality alone cannot rule it
+  out, since a backwards range covers nothing. `kernelRanges_correct` combines both guarantees.
 * `production_kernel_correct_unsigned`: the shipped configuration (512-bit vectors, unroll 4)
   satisfies the conditions for `u8`, `u16`, `u32`, and `u64` lanes. It does not cover the kernel's
   other key types; see "Scope".
@@ -127,8 +130,15 @@ Checked against "Nine Rules for Vibe Validation of Vibe-Coded Algorithms":
   Active size stayed flat while adding `kernelLanesMatch_eq_lanesMatch`; shared lemmas
   (`chunkCheck_eq_true_iff`, `toNat_one`, `valueSet_of_continuation`) replaced duplicated
   reasoning.
-* **Adversarial review (Rule 7):** pending. `specs/simd-run-check-review-prompt.md` is the
-  prompt for a fresh session with a different model.
+* **Adversarial review (Rule 7):** done by a fresh Codex session, using
+  `specs/simd-run-check-review-prompt.md`. It found no Rust/Lean mismatch, no vacuous hypothesis,
+  and no wrong result in the shipped configuration, and reported two issues:
+  1. *Proof gap:* set equality does not prove that every returned range is nonempty, which the
+     kernel's callers assert. Fixed: `allNonempty_kernelRanges`.
+  2. *Clarity:* for `char`, whose values don't fill their 32-bit lanes, the Rust compile-time
+     condition is sufficient but stricter than necessary, so "exactly when" overstated it. Fixed
+     in the Rust doc comment (`range-set-blaze` commit `8806b1ad`): exact for full lane types,
+     conservative for converted ones. Shipped unroll 4 is unaffected.
 * **Meta-prompting (Rule 1):** not followed. The proof was developed directly in one session.
 
 ## Possible follow-ups

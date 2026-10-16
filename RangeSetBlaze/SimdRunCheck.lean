@@ -609,19 +609,104 @@ theorem rangeSet_kernelRanges {L chunks : Nat} (hlanes : L ≤ 2 ^ w)
     rangeSet (kernelRanges L chunks values) = valueSet values := by
   simp [kernelRanges, rangeSet_collectRanges hlanes hblock]
 
-/-- **The shipped configuration is correct for unsigned lanes**: 512-bit vectors (64 `u8`, 32 `u16`,
-16 `u32`, or 8 `u64` lanes) and unroll factor 4. This does not cover the other key types the
+/-! ### The kernel's ranges are never backwards
+
+Covering the right values is not enough: `RangeCollector::push` and `UnionIter`, which consume the
+kernel's ranges, assert that every range is nonempty (`start ≤ stop`). A backwards range covers
+nothing, so `rangeSet_kernelRanges` alone cannot rule one out. -/
+
+/-- Every range in the list is nonempty: its start is at most its stop. -/
+def AllNonempty (ranges : List (BitVec w × BitVec w)) : Prop :=
+  ∀ r ∈ ranges, r.1 ≤ r.2
+
+theorem allNonempty_pushRange {ranges : List (BitVec w × BitVec w)} (hranges : AllNonempty ranges)
+    {start stop : BitVec w} (hle : start ≤ stop) : AllNonempty (pushRange ranges start stop) := by
+  cases ranges with
+  | nil => simpa [AllNonempty, pushRange] using hle
+  | cons current older =>
+    obtain ⟨currentStart, currentEnd⟩ := current
+    have hcurrent := hranges _ List.mem_cons_self
+    have holder : AllNonempty older := fun r hr => hranges r (List.mem_cons_of_mem _ hr)
+    by_cases hmerge : currentStart ≤ start ∧ (start ≤ currentEnd ∨ start - 1 = currentEnd)
+    · simp only [pushRange, if_pos hmerge]
+      intro r hr
+      rcases List.mem_cons.mp hr with rfl | hr
+      · simp only [BitVec.le_def] at hcurrent ⊢
+        by_cases hlt : currentEnd < stop
+        · rw [if_pos hlt]; rw [BitVec.lt_def] at hlt; omega
+        · rw [if_neg hlt]; exact hcurrent
+      · exact holder r hr
+    · simp only [pushRange, if_neg hmerge]
+      intro r hr
+      rcases List.mem_cons.mp hr with rfl | hr
+      · exact hle
+      · exact hranges r hr
+
+theorem allNonempty_pushValues {ranges : List (BitVec w × BitVec w)}
+    (hranges : AllNonempty ranges) (values : List (BitVec w)) :
+    AllNonempty (pushValues ranges values) := by
+  induction values generalizing ranges with
+  | nil => exact hranges
+  | cons v values ih =>
+    exact ih (allNonempty_pushRange hranges (by rw [BitVec.le_def]))
+
+/-- **The kernel never produces a backwards range**, under the same conditions as
+`rangeSet_collectRanges`. -/
+theorem allNonempty_collectRanges {L chunks : Nat} (hlanes : L ≤ 2 ^ w)
+    (hblock : chunks ≤ 1 ∨ chunks * L ≤ 2 ^ w ∨ 2 ^ w ∣ chunks * L)
+    (ranges : List (BitVec w × BitVec w)) (rest : List (BitVec w)) :
+    AllNonempty ranges → AllNonempty (collectRanges L chunks ranges rest) := by
+  fun_induction collectRanges L chunks ranges rest with
+  | case1 ranges rest hlong hchunk afterBlocks afterChunks ih =>
+    intro hranges
+    apply ih
+    apply allNonempty_pushRange hranges
+    -- The run starts at the first chunk's first value and ends at or after that chunk's last.
+    have hfirst : ((rest.take L).headD 0).toNat ≤ ((rest.take L).getLastD 0).toNat := by
+      simp only [chunkCheck, Bool.and_eq_true, decide_eq_true_eq, BitVec.le_def] at hchunk
+      exact hchunk.2
+    obtain ⟨-, -, hleBlocks, -⟩ :=
+      extendByBlocks_spec hblock ((rest.take L).getLastD 0) (rest.drop L)
+    obtain ⟨-, -, hleChunks, -⟩ := extendByChunks_spec hlanes afterBlocks.1 afterBlocks.2
+    change ((rest.take L).getLastD 0).toNat ≤ afterBlocks.1.toNat at hleBlocks
+    change afterBlocks.1.toNat ≤ afterChunks.1.toNat at hleChunks
+    rw [BitVec.le_def]
+    omega
+  | case2 ranges rest hlong hchunk ih =>
+    exact fun hranges => ih (allNonempty_pushValues hranges _)
+  | case3 ranges rest hshort =>
+    exact fun hranges => allNonempty_pushValues hranges rest
+
+theorem allNonempty_kernelRanges {L chunks : Nat} (hlanes : L ≤ 2 ^ w)
+    (hblock : chunks ≤ 1 ∨ chunks * L ≤ 2 ^ w ∨ 2 ^ w ∣ chunks * L) (values : List (BitVec w)) :
+    AllNonempty (kernelRanges L chunks values) :=
+  allNonempty_collectRanges hlanes hblock [] values (by simp [AllNonempty])
+
+/-- **The kernel is correct**: its ranges cover exactly the slice's values, and none is backwards. -/
+theorem kernelRanges_correct {L chunks : Nat} (hlanes : L ≤ 2 ^ w)
+    (hblock : chunks ≤ 1 ∨ chunks * L ≤ 2 ^ w ∨ 2 ^ w ∣ chunks * L) (values : List (BitVec w)) :
+    rangeSet (kernelRanges L chunks values) = valueSet values ∧
+      AllNonempty (kernelRanges L chunks values) :=
+  ⟨rangeSet_kernelRanges hlanes hblock values, allNonempty_kernelRanges hlanes hblock values⟩
+
+/-- **The shipped configuration is correct for unsigned lanes**: with 512-bit vectors (64 `u8`,
+32 `u16`, 16 `u32`, or 8 `u64` lanes) and unroll factor 4, the kernel's ranges cover exactly the
+slice's values, and none is backwards. This does not cover the other key types the
 kernel also runs on: signed lanes (`i8` … `i64`, `isize`), which compare `first ≤ last` in signed
 order; 128-bit keys, which span two lanes; and `char` and `Ipv4Addr`, which are converted lane by
 lane. -/
 theorem production_kernel_correct_unsigned :
-    (∀ values : List (BitVec 8), rangeSet (kernelRanges 64 4 values) = valueSet values) ∧
-    (∀ values : List (BitVec 16), rangeSet (kernelRanges 32 4 values) = valueSet values) ∧
-    (∀ values : List (BitVec 32), rangeSet (kernelRanges 16 4 values) = valueSet values) ∧
-    (∀ values : List (BitVec 64), rangeSet (kernelRanges 8 4 values) = valueSet values) :=
-  ⟨rangeSet_kernelRanges (by norm_num) (by norm_num),
-    rangeSet_kernelRanges (by norm_num) (by norm_num),
-    rangeSet_kernelRanges (by norm_num) (by norm_num),
-    rangeSet_kernelRanges (by norm_num) (by norm_num)⟩
+    (∀ values : List (BitVec 8), rangeSet (kernelRanges 64 4 values) = valueSet values ∧
+      AllNonempty (kernelRanges 64 4 values)) ∧
+    (∀ values : List (BitVec 16), rangeSet (kernelRanges 32 4 values) = valueSet values ∧
+      AllNonempty (kernelRanges 32 4 values)) ∧
+    (∀ values : List (BitVec 32), rangeSet (kernelRanges 16 4 values) = valueSet values ∧
+      AllNonempty (kernelRanges 16 4 values)) ∧
+    (∀ values : List (BitVec 64), rangeSet (kernelRanges 8 4 values) = valueSet values ∧
+      AllNonempty (kernelRanges 8 4 values)) :=
+  ⟨kernelRanges_correct (by norm_num) (by norm_num),
+    kernelRanges_correct (by norm_num) (by norm_num),
+    kernelRanges_correct (by norm_num) (by norm_num),
+    kernelRanges_correct (by norm_num) (by norm_num)⟩
 
 end SimdRunCheck
