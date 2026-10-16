@@ -13,6 +13,8 @@ import RangeSetBlaze.Query
 import RangeSetBlaze.SimdRunCheck
 import RangeSetBlaze.SimdKernel
 import RangeSetBlaze.SimdKeys
+import RangeSetBlaze.SimdKeysInt
+import RangeSetBlaze.SimdKeysChar
 
 -- Export main types and definitions
 export IntRange (toSet empty nonempty)
