@@ -95,14 +95,24 @@ whenever a block holds at most `2^w` keys, which every shipped configuration sat
 | `char` | `charLaneKey` (`sub_one` skips the surrogate gap) | `shipped_char_kernel_correct` |
 | `u128`, `Ipv6Addr` | `u128SimdKey` (two `u64` lanes per key) | `shipped_128bit_kernel_correct` |
 | `i128` | `i128SimdKey` (two lanes, signed order) | `shipped_128bit_kernel_correct` |
+| `TotalF32` `TotalF64` | `totalLaneKey` (the `total_cmp` ordered value; lane `floatKey`) | `shipped_float_kernel_correct` |
+| `NotNanF32` `NotNanF64` | `notNanLaneKey` (`sub_one` skips `-0.0`) | `shipped_float_kernel_correct` |
 
 Each shipped theorem covers 512-bit vectors and unroll factor 4. For 128-bit keys, the two-lane
 test plus `first ≤ last` rules out a carry from the low half into the high half, so SIMD can miss
 a run but never invent one. `Ipv4Addr` and `Ipv6Addr` are converted lane by lane in Rust, with
 exactly `u32`'s and `u128`'s lanes and order, so the unsigned models cover them.
 
+Floats (`SimdKeysFloat.lean`) are modeled by their `total_cmp` ordered value, the signed integer
+Rust's `total_cmp` compares, so the model's order is Rust's `Ord` by construction. Rust loads the
+lane `f32_key` / `f64_key` (`floatKey`); the width-specific fact is that this lane is the ordered
+value plus `2^(w-1)`, which reduces floats to the signed-integer proof. `NotNan` values exclude NaN
+and `-0.0`; `-0.0` is the only ordered value its `sub_one` skips, as `char` skips the surrogates.
+
 All of these depend only on Lean and Mathlib's standard axioms (`propext`, `Classical.choice`,
-`Quot.sound`). Two mutations of the unsigned-only first version confirmed the proofs depend on the
+`Quot.sound`), except the float theorem: it also depends on two `bv_decide` certificates, for the
+`f32` and `f64` lane identity (`FloatWidth.key_eq`), which are checked by compiled code rather
+than by Lean's kernel. Two mutations of the unsigned-only first version confirmed the proofs depend on the
 fix: dropping `first ≤ last` from the chunk test broke five proofs, and changing the shipped
 unroll factor to 5 broke its production theorem.
 
