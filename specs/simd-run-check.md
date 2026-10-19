@@ -123,6 +123,8 @@ unroll factor to 5 broke its production theorem.
   `RangeCollector::push`.
 * **Not modeled:**
   * the sort and union after the kernel, which only operate on the ranges it returns;
+  * `from_slice`'s switch to sorting a copy of a slice in no useful order, which only reorders the
+    kernel's input: the copy holds the same values, and the kernel theorem holds for any input;
   * the map kernel (`from_slices`);
   * the generic block-soundness condition is `M ≤ 2^w`; the exact condition with its
     `2^w ∣ M` case is proved only at the lane level for unsigned lanes (`blockCheck_sound_iff`).
