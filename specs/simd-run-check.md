@@ -105,14 +105,12 @@ exactly `u32`'s and `u128`'s lanes and order, so the unsigned models cover them.
 
 Floats (`SimdKeysFloat.lean`) are modeled by their `total_cmp` ordered value, the signed integer
 Rust's `total_cmp` compares, so the model's order is Rust's `Ord` by construction. Rust loads the
-lane `f32_key` / `f64_key` (`floatKey`); the width-specific fact is that this lane is the ordered
-value plus `2^(w-1)`, which reduces floats to the signed-integer proof. `NotNan` values exclude NaN
+lane `f32_key` / `f64_key` (`floatKey`); `floatKey_totalOrdered` proves, for every width, that this
+lane is the ordered value plus `2^(w-1)`, which reduces floats to the signed-integer proof. `NotNan` values exclude NaN
 and `-0.0`; `-0.0` is the only ordered value its `sub_one` skips, as `char` skips the surrogates.
 
 All of these depend only on Lean and Mathlib's standard axioms (`propext`, `Classical.choice`,
-`Quot.sound`), except the float theorem: it also depends on two `bv_decide` certificates, for the
-`f32` and `f64` lane identity (`FloatWidth.key_eq`), which are checked by compiled code rather
-than by Lean's kernel. Two mutations of the unsigned-only first version confirmed the proofs depend on the
+`Quot.sound`). Two mutations of the unsigned-only first version confirmed the proofs depend on the
 fix: dropping `first ≤ last` from the chunk test broke five proofs, and changing the shipped
 unroll factor to 5 broke its production theorem.
 
